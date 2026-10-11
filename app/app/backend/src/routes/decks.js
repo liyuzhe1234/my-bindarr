@@ -1,0 +1,521 @@
+const express = require('express');
+const db = require('../db');
+const cardApi = require('../utils/cardApi');
+const { parseCardRow, recordPrice } = require('../utils/priceHelpers');
+const { compartmentLabel } = require('../utils/compartmentSort');
+const { validateDeckAddition } = require('../utils/deckRules');
+const deckImage = require('../deckImage');
+
+const router = express.Router();
+
+// Get User Decks
+router.get('/', async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        d.id,
+        d.name,
+        d.description,
+        d.game,
+        d.format,
+        d.category,
+        d.accent_color,
+        d.target_size,
+        d.created_at,
+        d.checked_out,
+        d.checked_out_at,
+        COUNT(dc.card_id) as total_card_types,
+        COALESCE(SUM(dc.quantity), 0) as total_cards
+      FROM decks d
+      LEFT JOIN deck_cards dc ON d.id = dc.deck_id
+      WHERE d.user_id = ?
+      GROUP BY d.id
+      ORDER BY d.created_at DESC
+    `;
+    const rows = await db.all(query, [req.user.id]);
+    res.json(rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to retrieve decks' });
+  }
+});
+
+// Create Deck
+router.post('/', async (req, res) => {
+  const { 
+    name, 
+    description = '', 
+    game = 'pokemon',
+    format = 'Standard',
+    category = 'Competitive',
+    accent_color = '#eab308',
+    target_size = 60,
+    decklist_text = ''
+  } = req.body;
+  
+  if (!name) {
+    return res.status(400).json({ error: 'Deck name is required' });
+  }
+  const deckGame = ['pokemon', 'mtg', 'lorcana'].includes(game) ? game : 'pokemon';
+  const targetSizeNum = parseInt(target_size, 10) || 60;
+
+  try {
+    const result = await db.run(
+      `INSERT INTO decks (name, description, game, format, category, accent_color, target_size, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description, deckGame, format, category, accent_color, targetSizeNum, req.user.id]
+    );
+    const newDeckId = result.lastID;
+
+    // Optional decklist import
+    if (decklist_text && typeof decklist_text === 'string') {
+      const lines = decklist_text.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const match = trimmed.match(/^(\d+)x?\s+(.+)$/i);
+        if (match) {
+          const qty = parseInt(match[1], 10);
+          const cardName = match[2].trim();
+          const card = await db.get(`SELECT id FROM card_cache WHERE LOWER(name) = LOWER(?) AND game = ? LIMIT 1`, [cardName, deckGame]);
+          if (card) {
+            await db.run(
+              `INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?) ON CONFLICT(deck_id, card_id) DO UPDATE SET quantity = quantity + EXCLUDED.quantity`,
+              [newDeckId, card.id, qty]
+            );
+          }
+        }
+      }
+    }
+
+    res.status(201).json({ message: 'Deck created successfully', id: newDeckId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create deck' });
+  }
+});
+
+// Recognize a full deck-list export from 集换社. The image stays on this machine:
+// matching is performed against the locally downloaded Pokémon CN artwork index.
+router.post('/image/recognize', async (req, res) => {
+  try {
+    const { image } = req.body || {};
+    if (!image || typeof image !== 'string') return res.status(400).json({ error: '请选择卡组图片' });
+    const base64 = image.includes(',') ? image.slice(image.indexOf(',') + 1) : image;
+    const buffer = Buffer.from(base64, 'base64');
+    if (buffer.length < 1000) return res.status(400).json({ error: '图片数据无效' });
+    const result = await deckImage.recognize(buffer);
+    res.json(result);
+  } catch (error) {
+    console.error('deck image recognition failed:', error.message);
+    res.status(400).json({ error: error.message || '卡组图片识别失败' });
+  }
+});
+
+// Create the reviewed recognition result atomically. Nothing is written until the
+// user confirms the candidates and quantities in the preview page.
+router.post('/image/create', async (req, res) => {
+  const { name, cards, description = '由卡组图片识别创建' } = req.body || {};
+  if (!String(name || '').trim()) return res.status(400).json({ error: '请输入卡组名称' });
+  if (!Array.isArray(cards) || !cards.length || cards.length > 100) return res.status(400).json({ error: '卡牌列表无效' });
+  const clean = cards.map(item => ({ id: String(item.card_id || ''), quantity: Number.parseInt(item.quantity, 10) }))
+    .filter(item => item.id && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99);
+  if (clean.length !== cards.length) return res.status(400).json({ error: '卡牌或数量无效' });
+  try {
+    const ids = [...new Set(clean.map(item => item.id))];
+    const placeholders = ids.map(() => '?').join(',');
+    const existing = await db.all(`SELECT id FROM card_cache WHERE game = 'pokemon' AND id IN (${placeholders})`, ids);
+    if (existing.length !== ids.length) return res.status(400).json({ error: '有识别结果不在本地中文卡库中，请重新选择' });
+    await db.run('BEGIN IMMEDIATE');
+    const created = await db.run(
+      `INSERT INTO decks (name, description, game, format, category, accent_color, target_size, user_id)
+       VALUES (?, ?, 'pokemon', 'Standard', 'Competitive', '#eab308', ?, ?)`,
+      [String(name).trim(), description, clean.reduce((sum, item) => sum + item.quantity, 0), req.user.id]
+    );
+    for (const item of clean) {
+      await db.run(`INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)
+        ON CONFLICT(deck_id, card_id) DO UPDATE SET quantity = quantity + excluded.quantity`,
+      [created.lastID, item.id, item.quantity]);
+    }
+    await db.run('COMMIT');
+    res.status(201).json({ id: created.lastID, cards: clean.length, total: clean.reduce((sum, item) => sum + item.quantity, 0) });
+  } catch (error) {
+    await db.run('ROLLBACK').catch(() => {});
+    console.error('deck image create failed:', error.message);
+    res.status(500).json({ error: '创建卡组失败' });
+  }
+});
+
+// Get Deck Details (with Cards)
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deck = await db.get(`SELECT * FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) {
+      return res.status(404).json({ error: 'Deck not found' });
+    }
+
+    const cardsQuery = `
+      SELECT
+        dc.quantity,
+        cc.id,
+        cc.name, cc.printed_name,
+        cc.supertype,
+        cc.subtypes,
+        cc.types,
+        cc.rarity,
+        cc.set_id,
+        cc.set_name,
+        cc.number,
+        cc.image_url,
+        cc.price_trend,
+        (SELECT COALESCE(SUM(quantity), 0) FROM collection WHERE card_id = cc.id AND user_id = ? AND list_type = 'collection') AS owned_qty
+      FROM deck_cards dc
+      JOIN card_cache cc ON dc.card_id = cc.id
+      WHERE dc.deck_id = ?
+    `;
+    const cards = await db.all(cardsQuery, [req.user.id, id]);
+
+    const formatted = cards.map(parseCardRow);
+
+    res.json({
+      ...deck,
+      cards: formatted
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to retrieve deck details' });
+  }
+});
+
+// Get physical locations for cards in a deck
+router.get('/:id/locations', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deck = await db.get(`SELECT id FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) return res.status(404).json({ error: 'Deck not found' });
+
+    // Find how many of each card are in the deck
+    const requiredCards = await db.all(`SELECT card_id, quantity FROM deck_cards WHERE deck_id = ?`, [id]);
+    const requiredMap = new Map(requiredCards.map(r => [r.card_id, r.quantity]));
+
+    // Find all owned instances of those cards
+    const query = `
+      SELECT 
+        c.id as entry_id, c.card_id, c.quantity as owned_qty, c.position, c.location_id, c.compartment_id,
+        cc.name as card_name, cc.printed_name, cc.set_name, cc.number,
+        l.name as location_name, l.type as location_type,
+        cp.label as compartment_label, cp.idx as compartment_idx
+      FROM collection c
+      JOIN card_cache cc ON c.card_id = cc.id
+      LEFT JOIN locations l ON c.location_id = l.id
+      LEFT JOIN compartments cp ON c.compartment_id = cp.id
+      WHERE c.user_id = ? AND c.list_type = 'collection' AND c.card_id IN (SELECT card_id FROM deck_cards WHERE deck_id = ?)
+      ORDER BY (c.location_id IS NOT NULL) DESC, cc.name ASC, c.added_at DESC
+    `;
+    const instances = await db.all(query, [req.user.id, id]);
+    
+    // Group them and figure out what to tell the user
+    // We only need to tell them where to find \`required\` amount.
+    const results = [];
+    for (const [cardId, requiredQty] of requiredMap.entries()) {
+      let needed = requiredQty;
+      const cardInstances = instances.filter(i => i.card_id === cardId);
+      
+      const foundLocations = [];
+      for (const inst of cardInstances) {
+        if (needed <= 0) break;
+        const take = Math.min(inst.owned_qty, needed);
+        needed -= take;
+        
+        const compDisplay = inst.compartment_idx !== null
+          ? compartmentLabel({ label: inst.compartment_label, idx: inst.compartment_idx }, inst.location_type)
+          : inst.compartment_label;
+
+        foundLocations.push({
+          take,
+          // A pull list is display-only, so the name is the one printed on the card
+          // — nothing downstream keys off it.
+          card_name: inst.printed_name || inst.card_name,
+          set_name: inst.set_name,
+          number: inst.number,
+          location_name: inst.location_name || 'Unassigned Pile',
+          location_type: inst.location_type,
+          compartment_display: compDisplay,
+          position: inst.location_name ? inst.position : null,
+          location_id: inst.location_id,
+          compartment_id: inst.compartment_id,
+          entry_id: inst.entry_id
+        });
+      }
+      
+      results.push({
+        card_id: cardId,
+        required: requiredQty,
+        found: requiredQty - needed,
+        missing: needed,
+        locations: foundLocations
+      });
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to retrieve card locations' });
+  }
+});
+
+// Turn a deck list into owned collection entries. This intentionally writes only
+// to the user's Collection; the deck itself is unchanged.
+router.post('/:id/add-to-collection', async (req, res) => {
+  const { id } = req.params;
+  const {
+    condition = 'Near Mint',
+    printing = 'Normal',
+    language = 'Chinese (Simplified)',
+    location_id = null
+  } = req.body || {};
+
+  try {
+    const deck = await db.get(`SELECT id, name FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) return res.status(404).json({ error: 'Deck not found' });
+    const cards = await db.all(`SELECT card_id, quantity FROM deck_cards WHERE deck_id = ?`, [id]);
+    if (!cards.length) return res.status(400).json({ error: 'Deck has no cards' });
+
+    const locationId = location_id === '' || location_id == null ? null : Number.parseInt(location_id, 10);
+    if (locationId != null) {
+      if (!Number.isInteger(locationId)) return res.status(400).json({ error: 'Invalid location' });
+      const location = await db.get(`SELECT id FROM locations WHERE id = ? AND user_id = ?`, [locationId, req.user.id]);
+      if (!location) return res.status(400).json({ error: 'Location not found' });
+    }
+
+    const results = [];
+    const failed = [];
+    for (const row of cards) {
+      try {
+        const card = await db.get(`SELECT id, game FROM card_cache WHERE id = ?`, [row.card_id]);
+        if (!card) throw new Error('Card not found in cache');
+        const added = await db.run(`
+          INSERT INTO collection (
+            card_id, quantity, condition, printing, language, purchase_price,
+            location_id, compartment_id, position, user_id, list_type, game
+          ) VALUES (?, ?, ?, ?, ?, 0, ?, NULL, 0, ?, 'collection', ?)
+        `, [
+          row.card_id,
+          Math.max(1, parseInt(row.quantity, 10) || 1),
+          condition,
+          printing,
+          language,
+          locationId,
+          req.user.id,
+          card.game || 'pokemon'
+        ]);
+        results.push({ id: added.lastID, card_id: row.card_id });
+      } catch (error) {
+        console.error(error);
+        failed.push({ card_id: row.card_id, error: error.message || 'Failed to add card' });
+      }
+    }
+
+    const total = cards.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    res.status(failed.length && !results.length ? 500 : 200).json({
+      message: failed.length
+        ? `Added ${results.length} card type(s); ${failed.length} failed.`
+        : `Added deck "${deck.name}" to Collection (${cards.length} types, ${total} cards).`,
+      deck_id: deck.id,
+      types: cards.length,
+      total,
+      added: results.length,
+      failed
+    });
+  } catch (error) {
+    console.error('deck add-to-collection failed:', error.message);
+    res.status(500).json({ error: 'Failed to add deck to collection' });
+  }
+});
+
+// Update Deck Metadata
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Deck name is required' });
+  }
+
+  try {
+    const result = await db.run(
+      `UPDATE decks SET name = ?, description = ? WHERE id = ? AND user_id = ?`,
+      [name, description || '', id, req.user.id]
+    );
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Deck not found or unauthorized' });
+    }
+
+    res.json({ message: 'Deck updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update deck' });
+  }
+});
+
+// Delete Deck
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Verify ownership
+    const deck = await db.get(`SELECT id FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) {
+      return res.status(404).json({ error: 'Deck not found or unauthorized' });
+    }
+
+    // Manual cascade deletion
+    await db.run(`DELETE FROM deck_cards WHERE deck_id = ?`, [id]);
+    await db.run(`DELETE FROM decks WHERE id = ?`, [id]);
+
+    res.json({ message: 'Deck deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete deck' });
+  }
+});
+
+// Add/Update Card in Deck
+router.post('/:id/cards', async (req, res) => {
+  const { id } = req.params;
+  const { card_id, quantity = 1 } = req.body;
+
+  if (!card_id) {
+    return res.status(400).json({ error: 'card_id is required' });
+  }
+
+  try {
+    // Verify deck ownership
+    const deck = await db.get(`SELECT id FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) {
+      return res.status(404).json({ error: 'Deck not found or unauthorized' });
+    }
+
+    // Ensure card metadata exists in cache. Dispatch on the ID, because only the
+    // provider that minted it can resolve it: this asked pokemontcg.io for every
+    // uncached card, and tcgApi.getCardById short-circuits on 'mtg-' and
+    // 'tcgdex-' ids to whatever is cached — so an uncached MTG or non-English
+    // Pokémon card came back null and the deck refused it as "not found on the
+    // Pokémon TCG API", for a card that exists on a provider it never asked.
+    let card = await db.get(`SELECT id FROM card_cache WHERE id = ?`, [card_id]);
+    if (!card) {
+      console.log(`Card ${card_id} not in cache. Fetching...`);
+      const apiCard = await cardApi.getCardById(card_id, { tcgApiKey: req.user.tcg_api_key });
+      if (!apiCard) {
+        return res.status(404).json({ error: `Card ${card_id} not found on any card provider.` });
+      }
+    }
+
+    // Enforce deck rules (owned-copy cap + max 4 per name). quantity here is the
+    // absolute new count for this card, so validate it directly.
+    const check = await validateDeckAddition({ deckId: id, userId: req.user.id, cardId: card_id, newQty: quantity });
+    if (!check.ok) return res.status(400).json({ error: check.error });
+
+    // Insert or update quantities
+    await db.run(`
+      INSERT INTO deck_cards (deck_id, card_id, quantity)
+      VALUES (?, ?, ?)
+      ON CONFLICT(deck_id, card_id) DO UPDATE SET quantity = ?
+    `, [id, card_id, parseInt(quantity, 10), parseInt(quantity, 10)]);
+
+    // Record initial price history trend if card is added
+    const cacheCard = await db.get(`SELECT price_trend FROM card_cache WHERE id = ?`, [card_id]);
+    if (cacheCard) await recordPrice(card_id, cacheCard.price_trend);
+
+    res.json({ message: 'Card added/updated in deck successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to add card to deck' });
+  }
+});
+
+// Remove Card from Deck
+router.delete('/:id/cards/:card_id', async (req, res) => {
+  const { id, card_id } = req.params;
+  try {
+    // Verify deck ownership
+    const deck = await db.get(`SELECT id FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) {
+      return res.status(404).json({ error: 'Deck not found or unauthorized' });
+    }
+
+    await db.run(`DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ?`, [id, card_id]);
+    res.json({ message: 'Card removed from deck successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to remove card from deck' });
+  }
+});
+
+// Checkout Deck (mark as in play)
+router.put('/:id/checkout', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deck = await db.get(`SELECT id, name FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) {
+      return res.status(404).json({ error: 'Deck not found or unauthorized' });
+    }
+
+    // Validate that we have enough cards physically available
+    const validationQuery = `
+      SELECT 
+        dc.card_id, 
+        cc.name, cc.printed_name, 
+        dc.quantity AS required_qty,
+        (SELECT COALESCE(SUM(quantity), 0) FROM collection WHERE card_id = dc.card_id AND user_id = ? AND list_type = 'collection') AS owned_qty,
+        (SELECT COALESCE(SUM(dc2.quantity), 0) FROM deck_cards dc2 JOIN decks d2 ON dc2.deck_id = d2.id WHERE d2.checked_out = 1 AND d2.user_id = ? AND d2.id != ? AND dc2.card_id = dc.card_id) AS locked_qty
+      FROM deck_cards dc
+      JOIN card_cache cc ON dc.card_id = cc.id
+      WHERE dc.deck_id = ?
+    `;
+    const cards = await db.all(validationQuery, [req.user.id, req.user.id, id, id]);
+    
+    let errors = [];
+    for (const card of cards) {
+      const available = card.owned_qty - card.locked_qty;
+      if (card.required_qty > available) {
+        const deficit = card.required_qty - available;
+        errors.push(`Missing ${deficit}x ${card.printed_name || card.name} (Owned: ${card.owned_qty}, In Use: ${card.locked_qty})`);
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ error: 'Not enough cards available to check out this deck.', details: errors });
+    }
+
+    await db.run(
+      `UPDATE decks SET checked_out = 1, checked_out_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [id]
+    );
+    res.json({ message: 'Deck checked out successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to checkout deck' });
+  }
+});
+
+// Return Deck (mark as returned to storage)
+router.put('/:id/return', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deck = await db.get(`SELECT id FROM decks WHERE id = ? AND user_id = ?`, [id, req.user.id]);
+    if (!deck) {
+      return res.status(404).json({ error: 'Deck not found or unauthorized' });
+    }
+    await db.run(
+      `UPDATE decks SET checked_out = 0, checked_out_at = NULL WHERE id = ?`,
+      [id]
+    );
+    res.json({ message: 'Deck returned to storage successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to return deck' });
+  }
+});
+
+module.exports = router;

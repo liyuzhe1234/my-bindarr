@@ -1,0 +1,48 @@
+# Private configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Personal collection data and generated backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+backups/
+app/app/backend/backend/database/
+app/app/backend/database/
+
+# Installed dependencies and logs
+node_modules/
+*.log
+npm-debug.log*
+
+# Locally packaged releases
+*.zip
+*.7z
+*.rar
+*.exe
+
+# Generated card/image recognition indexes (rebuild locally)
+app/app/backend/data/deck-image/
+app/app/backend/data/models/
+
+# Local card art, uploads and image samples
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.bmp
+*.avif
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
