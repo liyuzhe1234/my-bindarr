@@ -1,2 +1,0 @@
-import{x as e}from"./index-DAu-IwHY.js";var t=e(`ArrowLeft`,[[`path`,{d:`m12 19-7-7 7-7`,key:`1l729n`}],[`path`,{d:`M19 12H5`,key:`x3x0zl`}]]);export{t};
-//# sourceMappingURL=arrow-left-Bxs-Dk-C.js.map

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>单张卡图片识别 · Bindarr</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07101f;--panel:#101a2d;--line:#26344f;--text:#f5f7fb;--muted:#9aa9c1;--red:#ff5358;--green:#34d399;--yellow:#fbbf24}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#17233c 0,#07101f 45%);color:var(--text);font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1050px;margin:auto;padding:28px 20px 80px}a{color:#b9c9e8;text-decoration:none}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:24px}h1{font-size:28px;margin:0 0 6px}.lead,.status{color:var(--muted);margin:0}.panel{background:rgba(16,26,45,.94);border:1px solid var(--line);border-radius:20px;padding:22px;margin-top:18px;box-shadow:0 18px 55px #0005}
+    .drop{display:grid;place-items:center;min-height:230px;border:2px dashed #435274;border-radius:15px;text-align:center;padding:22px;cursor:pointer}.drop:hover,.drop.drag{border-color:var(--red);background:#ff53580b}input[type=file]{display:none}#preview{max-width:260px;max-height:360px;border-radius:9px;display:none}.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px}button{border:0;border-radius:11px;padding:12px 20px;font-weight:750;cursor:pointer;color:#fff;background:#24314b}button.primary{background:var(--red);box-shadow:0 9px 25px #ff535833}button:disabled{opacity:.45;cursor:not-allowed}
+    .candidates{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:13px;margin-top:18px}.candidate{position:relative;border:2px solid var(--line);border-radius:13px;padding:9px;background:#0b1426;cursor:pointer}.candidate.selected{border-color:var(--red);box-shadow:0 0 0 3px #ff535822}.candidate img{display:block;width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:7px;background:#192238}.candidate strong{display:block;margin-top:7px}.candidate small{display:block;color:var(--muted)}.badge{position:absolute;right:13px;top:13px;background:#07101fdd;border-radius:20px;padding:3px 7px;font-size:11px}
+    .form{display:grid;grid-template-columns:100px repeat(3,minmax(150px,1fr)) auto;gap:12px;align-items:end;margin-top:20px}.field{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:12px}.field input,.field select{width:100%;background:#091223;color:var(--text);border:1px solid #35435e;border-radius:8px;padding:10px;font-size:15px}.success{color:var(--green)}.warn{color:var(--yellow)}@media(max-width:760px){.form{grid-template-columns:1fr}.top{align-items:flex-start}.candidates{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+</head>
+<body><main>
+  <div class="top"><div><h1>上传一张卡牌图片</h1><p class="lead">从相册或电脑选择图片，确认识别结果后加入 Collection。</p></div><a href="/">← 返回 Bindarr</a></div>
+  <section class="panel">
+    <label class="drop" id="drop"><div id="prompt"><div style="font-size:42px">▣</div><strong>选择或拖入一张卡牌图片</strong><div class="status">卡牌尽量完整、清晰，减少反光和遮挡</div></div><img id="preview" alt="待识别卡牌"></label>
+    <input id="file" type="file" accept="image/png,image/jpeg,image/webp">
+    <div class="actions"><button class="primary" id="recognize" disabled>识别这张卡</button><span class="status" id="status">尚未选择图片</span></div>
+  </section>
+  <section class="panel" id="result" hidden>
+    <strong>请选择正确的卡牌版本</strong><div class="status" id="hint">第一项是最接近的结果，请核对卡图、系列和编号。</div>
+    <div class="candidates" id="candidates"></div>
+    <div class="form">
+      <label class="field">数量<input id="quantity" type="number" min="1" max="99" value="1"></label>
+      <label class="field">品相<select id="condition"><option>Near Mint</option><option>Lightly Played</option><option>Moderately Played</option><option>Heavily Played</option><option>Damaged</option></select></label>
+      <label class="field">版本<select id="printing"><option>Normal</option><option>Holofoil</option><option>Reverse Holofoil</option><option>Promo</option></select></label>
+      <label class="field">Location<select id="location"><option value="">未分类 / Unassigned</option></select></label>
+      <button class="primary" id="add">加入 Collection</button>
+    </div>
+  </section>
+</main><script>
+  const $=id=>document.getElementById(id);let imageData='',candidates=[],selected=0;
+  const authHeaders=()=>{const token=localStorage.getItem('bindarr_token');return {'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})}};
+  async function loadLocations(){try{const r=await fetch('/api/locations',{headers:authHeaders()});if(!r.ok)return;for(const loc of await r.json()){const o=document.createElement('option');o.value=loc.id;o.textContent=loc.name;$('location').appendChild(o)}}catch{}}
+  loadLocations();
+  function prepareImage(file){return new Promise((resolve,reject)=>{if(!file||!file.type.startsWith('image/'))return reject(Error('请选择图片文件'));if(file.size>20*1024*1024)return reject(Error('图片不能超过 20 MB'));const reader=new FileReader;reader.onerror=()=>reject(Error('无法读取图片'));reader.onload=()=>{const img=new Image;img.onerror=()=>reject(Error('无法解析图片'));img.onload=()=>{const max=1800,scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',.9))};img.src=reader.result};reader.readAsDataURL(file)})}
+  async function setFile(file){try{imageData=await prepareImage(file);$('preview').src=imageData;$('preview').style.display='block';$('prompt').style.display='none';$('recognize').disabled=false;$('status').textContent=file.name;$('result').hidden=true}catch(e){$('status').textContent=e.message}}
+  $('drop').onclick=()=>$('file').click();$('file').onchange=e=>setFile(e.target.files[0]);for(const ev of ['dragenter','dragover'])$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('drag')});for(const ev of ['dragleave','drop'])$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('drag')});$('drop').addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
+  const cardName=c=>c.printed_name||c.name||c.id;
+  function render(){const box=$('candidates');box.textContent='';candidates.forEach((row,i)=>{const card=row.card,el=document.createElement('div');el.className='candidate'+(i===selected?' selected':'');const img=document.createElement('img');img.src=card.image_url||'';img.alt=cardName(card);const name=document.createElement('strong');name.textContent=cardName(card);const meta=document.createElement('small');meta.textContent=`${card.set_name||card.set_id||''} #${card.number||''}`;const badge=document.createElement('span');badge.className='badge';badge.textContent=`${Math.round((row.score||0)*100)}%`;el.append(img,name,meta,badge);el.onclick=()=>{selected=i;render()};box.appendChild(el)});$('result').hidden=false;$('result').scrollIntoView({behavior:'smooth'})}
+  $('recognize').onclick=async()=>{const b=$('recognize');b.disabled=true;$('status').textContent='正在本地卡图库中识别…';try{const r=await fetch('/api/scan-match',{method:'POST',headers:authHeaders(),body:JSON.stringify({game:'pokemon',image:imageData,cropped:false,lang:'zh-cn'})});const j=await r.json();if(!r.ok)throw Error(r.status===401?'登录已失效，请返回 Bindarr 重新登录':j.error||'识别失败');candidates=(j.candidates||[]).filter(x=>x.card&&x.card.id);if(!candidates.length)throw Error(j.error||'没有找到可用候选卡，请换一张更清晰、边缘完整的图片');selected=0;render();$('status').textContent=`识别完成，找到 ${candidates.length} 个候选`;$('hint').className='status '+(j.notInCatalog?'warn':'');$('hint').textContent=j.notInCatalog?'匹配结果不够突出，请务必人工核对后再添加。':'第一项是最接近的结果，请核对卡图、系列和编号。'}catch(e){$('status').textContent=e.message}finally{b.disabled=false}};
+  $('add').onclick=async()=>{const b=$('add'),card=candidates[selected]?.card;if(!card)return;b.disabled=true;b.textContent='正在添加…';try{const quantity=Math.max(1,Math.min(99,Number($('quantity').value)||1));const r=await fetch('/api/collection/image-add',{method:'POST',headers:authHeaders(),body:JSON.stringify({cards:[{card_id:card.id,quantity}],location_id:$('location').value||null,language:'Chinese (Simplified)',condition:$('condition').value,printing:$('printing').value})});const j=await r.json();if(!r.ok)throw Error(j.error||'添加失败');b.textContent=`已加入 ${j.total} 张`;b.classList.add('success');$('status').textContent=`${cardName(card)} 已加入 Collection`}catch(e){alert(e.message);b.disabled=false;b.textContent='加入 Collection'}};
+</script></body></html>

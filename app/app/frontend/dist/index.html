@@ -5,59 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Bindarr</title>
-    <!-- Apply saved theme before first paint so there's no flash of the wrong theme. -->
     <script>
-      (function () {
-        try {
-          const urlTheme = new URLSearchParams(window.location.search).get('theme');
-          document.documentElement.setAttribute('data-theme', urlTheme || localStorage.getItem('theme') || 'dark');
-        } catch (e) { /* private mode / storage blocked: stay on dark */ }
-      })();
+      (function () { try { const q = new URLSearchParams(location.search).get('theme'); document.documentElement.setAttribute('data-theme', q || localStorage.getItem('theme') || 'dark'); } catch (_) {} })();
     </script>
-    <script>
-      (function () {
-        var armed = true;
-        function preferSearchAdd() {
-          var tabs = document.querySelector('.sub-nav-tabs');
-          if (!tabs) { armed = true; return; }
-          if (!armed) return;
-          var buttons = tabs.querySelectorAll('button');
-          if (buttons.length >= 2 && !buttons[1].classList.contains('active')) {
-            buttons[1].click();
-          }
-          armed = false;
-        }
-        new MutationObserver(preferSearchAdd).observe(document.documentElement, { childList: true, subtree: true });
-        window.addEventListener('DOMContentLoaded', preferSearchAdd);
-      })();
-    </script>
-    <script>
-      (function () {
-        var armed = true;
-        function preferSearchAdd() {
-          var tabs = document.querySelector('.sub-nav-tabs');
-          if (!tabs) { armed = true; return; }
-          if (!armed) return;
-          var buttons = tabs.querySelectorAll('button');
-          if (buttons.length >= 2 && !buttons[1].classList.contains('active')) {
-            buttons[1].click();
-          }
-          armed = false;
-        }
-        new MutationObserver(preferSearchAdd).observe(document.documentElement, { childList: true, subtree: true });
-        window.addEventListener('DOMContentLoaded', preferSearchAdd);
-      })();
-    </script>
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;800;900&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600;700;800&family=Philosopher:ital,wght@0,400;0,700;1,400;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-bindarr-local-20261003-favorite-fix.js"></script>
-    <script defer src="/deck-image-link.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BXa1oRBx.css">
+    <script type="module" crossorigin src="/assets/index-3vg1KMpq.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/preload-helper-dtukkIW9.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-JduxfDtE.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script defer src="/deck-image-link.js"></script>
     <script defer src="/efficiency-link.js"></script>
-</body>
+  </body>
 </html>

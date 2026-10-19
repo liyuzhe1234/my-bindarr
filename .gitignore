@@ -18,6 +18,7 @@ app/app/backend/database/
 
 # Installed dependencies and logs
 node_modules/
+app/app/frontend/public/ort/
 *.log
 npm-debug.log*
 

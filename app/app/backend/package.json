@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "test": "node test/run.js && node test/e2e/run.js",
     "test:e2e": "node test/e2e/run.js"
+    ,"test:sales": "node --test test/sales.test.js"
   },
   "dependencies": {
     "axios": "^1.6.8",

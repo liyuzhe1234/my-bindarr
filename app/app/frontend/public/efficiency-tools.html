@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bindarr 高效录入工具</title>
+  <link rel="stylesheet" href="/assets/index-BXa1oRBx.css">
+  <style>
+    body { background:#0f172a; color:#e5e7eb; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    .top { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:18px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px; }
+    .panel { background:rgba(15,23,42,.82); border:1px solid rgba(148,163,184,.22); border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    h1 { margin:0; font-size:26px; }
+    h2 { margin:0 0 10px; font-size:18px; }
+    p { color:#94a3b8; line-height:1.5; }
+    button, input, select { border-radius:10px; border:1px solid rgba(148,163,184,.3); background:#111827; color:#e5e7eb; padding:10px 12px; }
+    button { cursor:pointer; font-weight:700; }
+    button.primary { background:#ef4444; border-color:#ef4444; color:white; }
+    button.secondary { background:#1f2937; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+    .row > * { flex:1; min-width:120px; }
+    .status { margin-top:10px; color:#fbbf24; white-space:pre-wrap; }
+    .cards { display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:12px; margin-top:12px; }
+    .card { background:#111827; border:1px solid rgba(148,163,184,.18); border-radius:12px; padding:8px; }
+    .card img { width:100%; border-radius:8px; aspect-ratio:.718; object-fit:cover; background:#020617; }
+    .card .name { font-weight:800; font-size:13px; margin-top:6px; }
+    .card .meta { color:#94a3b8; font-size:12px; }
+    .candidate { display:flex; gap:10px; align-items:center; border:1px solid rgba(148,163,184,.18); border-radius:12px; padding:8px; margin-top:8px; cursor:pointer; }
+    .candidate.selected { border-color:#ef4444; background:rgba(239,68,68,.12); }
+    .candidate img { width:58px; border-radius:6px; }
+    a { color:#93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Bindarr 高效录入工具</h1>
+        <p>集中处理：单张图片识别、最近添加核对、卡组一键加入 Collection、中文分类修复。</p>
+      </div>
+      <a href="/" class="btn btn-secondary">返回 Bindarr</a>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>1. 单张卡图识别 → 加入 Collection</h2>
+        <p>上传一张卡牌图片，先显示候选，确认后再加入 Collection。</p>
+        <input id="singleFile" type="file" accept="image/*" />
+        <div class="row">
+          <select id="singleLang">
+            <option value="Chinese (Simplified)">Chinese (Simplified)</option>
+            <option value="English">English</option>
+            <option value="Japanese">Japanese</option>
+          </select>
+          <input id="singleQty" type="number" min="1" value="1" title="数量" />
+        </div>
+        <div class="row">
+          <button class="primary" id="singleRecognize">识别图片</button>
+          <button class="secondary" id="singleAdd" disabled>确认加入 Collection</button>
+        </div>
+        <div id="singleStatus" class="status"></div>
+        <div id="singleCandidates"></div>
+      </section>
+
+      <section class="panel">
+        <h2>2. 最近添加核对</h2>
+        <p>显示最近加入 Collection 的卡，方便你检查是否加错、数量是否正确。</p>
+        <div class="row">
+          <button class="primary" id="loadRecent">刷新最近 50 张</button>
+        </div>
+        <div id="recentStatus" class="status"></div>
+        <div id="recentCards" class="cards"></div>
+      </section>
+
+      <section class="panel">
+        <h2>3. 一键“我拥有这个卡组”</h2>
+        <p>选择一个 Deck，把里面所有卡按卡组数量加入 Collection。</p>
+        <div class="row">
+          <select id="deckSelect"></select>
+          <button class="secondary" id="reloadDecks">刷新卡组</button>
+        </div>
+        <div class="row">
+          <select id="deckLang">
+            <option value="Chinese (Simplified)">Chinese (Simplified)</option>
+            <option value="English">English</option>
+          </select>
+          <button class="primary" id="ownDeck">加入 Collection</button>
+        </div>
+        <div id="deckStatus" class="status"></div>
+      </section>
+
+      <section class="panel">
+        <h2>4. 修复 Pokémon CN 分类</h2>
+        <p>当 Collection 或 Deck Builder 里 Trainer / Pokémon / Energy 混在一起时，点这里重新修复本地中文库分类。</p>
+        <button class="primary" id="repairTypes">修复中文分类</button>
+        <div id="repairStatus" class="status"></div>
+      </section>
+
+      <section class="panel">
+        <h2>5. 卡组图片导入确认</h2>
+        <p>卡组图片导入已经是“先识别、再确认、再创建”的流程。你可以继续使用这个入口。</p>
+        <a href="/deck-image-import.html" class="btn btn-primary">打开卡组图片导入</a>
+      </section>
+
+      <section class="panel">
+        <h2>6. 批量 Collection / Wishlist</h2>
+        <p>在 Add Cards → Search & Add 搜索结果里点 Select，选择多张卡后，现在工具条会提供批量加入 Collection；我也会在原页面加上批量加入 Wishlist。</p>
+        <a href="/" class="btn btn-secondary">回到 Add Cards</a>
+      </section>
+    </div>
+  </div>
+  <script src="/efficiency-tools.js"></script>
+</body>
+</html>

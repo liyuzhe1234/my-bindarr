@@ -271,6 +271,44 @@ async function initDb() {
     )
   `);
 
+  // Completed sales are an audit ledger, not another collection list. The
+  // header stores the accounting inputs while sale_items stores one immutable
+  // snapshot per physical card removed from collection. Voiding a sale restores
+  // those snapshots and keeps the ledger row for history.
+  await run(`
+    CREATE TABLE IF NOT EXISTS sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      card_id TEXT NOT NULL,
+      sold_at DATETIME NOT NULL,
+      unit_price REAL NOT NULL CHECK(unit_price >= 0),
+      platform_fee REAL NOT NULL DEFAULT 0 CHECK(platform_fee >= 0),
+      shipping_cost REAL NOT NULL DEFAULT 0 CHECK(shipping_cost >= 0),
+      currency TEXT NOT NULL DEFAULT 'CNY' CHECK(currency = 'CNY'),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'voided')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      voided_at DATETIME,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(card_id) REFERENCES card_cache(id)
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS sale_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sale_id INTEGER NOT NULL,
+      card_id TEXT NOT NULL,
+      original_entry_id INTEGER,
+      purchase_cost REAL NOT NULL DEFAULT 0,
+      snapshot_json TEXT NOT NULL,
+      FOREIGN KEY(sale_id) REFERENCES sales(id) ON DELETE RESTRICT,
+      FOREIGN KEY(card_id) REFERENCES card_cache(id)
+    )
+  `);
+  await run(`CREATE INDEX IF NOT EXISTS idx_sales_user_date ON sales(user_id, sold_at DESC)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_sales_user_status ON sales(user_id, status)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)`);
+
   // card_cache id -> TCGplayer productId, for the Pokémon rows whose providers do
   // not carry one (TCGdex supplies none at all; Scryfall gives MTG its id directly,
   // so MTG never needs a row here).
