@@ -254,6 +254,7 @@ async function initDb() {
       favorite INTEGER DEFAULT 0,
       is_trade INTEGER DEFAULT 0,
       list_type TEXT DEFAULT 'collection',
+      folder TEXT DEFAULT '',
       game TEXT DEFAULT 'pokemon',
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE SET NULL,
@@ -647,6 +648,9 @@ async function initDb() {
   }
   if (!collectionCols.some(c => c.name === 'notes')) {
     await run(`ALTER TABLE collection ADD COLUMN notes TEXT DEFAULT ''`);
+  }
+  if (!collectionCols.some(c => c.name === 'folder')) {
+    await run(`ALTER TABLE collection ADD COLUMN folder TEXT DEFAULT ''`);
   }
   // Grading lives on the COPY, not on the printing. A PSA 10 and a raw copy of the
   // same card share one card_cache row and differ only in what the owner holds —

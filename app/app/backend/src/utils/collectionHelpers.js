@@ -181,11 +181,11 @@ async function splitStackedEntries(database) {
       await dbClient.run(`
         INSERT INTO collection (
           card_id, user_id, quantity, condition, printing, language, purchase_price,
-          location_id, compartment_id, position, is_trade, favorite, list_type, game
-        ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          location_id, compartment_id, position, is_trade, favorite, list_type, folder, game
+        ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         e.card_id, e.user_id, e.condition, e.printing, e.language, e.purchase_price,
-        e.location_id, e.compartment_id, (e.position || 0) + i * 0.001, e.is_trade, e.favorite, e.list_type, e.game
+        e.location_id, e.compartment_id, (e.position || 0) + i * 0.001, e.is_trade, e.favorite, e.list_type, e.folder || '', e.game
       ]);
       created++;
     }
@@ -201,9 +201,9 @@ async function stackSiblings(dbClient, userId, row, entryId) {
   return dbClient.all(`
     SELECT id, quantity FROM collection
     WHERE user_id = ? AND card_id = ? AND condition = ? AND printing = ?
-      AND language = ? AND list_type = ? AND id != ?
+      AND language = ? AND list_type = ? AND COALESCE(folder, '') = ? AND id != ?
     ORDER BY (location_id IS NULL) DESC, id DESC
-  `, [userId, row.card_id, row.condition, row.printing, row.language, row.list_type, entryId]);
+  `, [userId, row.card_id, row.condition, row.printing, row.language, row.list_type, row.folder || '', entryId]);
 }
 
 // Make the number of copies this stack represents equal `target`, keeping the
@@ -227,12 +227,12 @@ async function setStackQuantity(database, userId, entryId, target) {
     await dbClient.run(`
       INSERT INTO collection (
         card_id, user_id, quantity, condition, printing, language, purchase_price,
-        location_id, compartment_id, position, is_trade, favorite, list_type, game
-      ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        location_id, compartment_id, position, is_trade, favorite, list_type, folder, game
+      ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       row.card_id, userId, row.condition, row.printing, row.language, row.purchase_price,
       row.location_id, row.compartment_id, (row.position || 0) + (i + 1) * 0.001,
-      row.is_trade, row.favorite, row.list_type, row.game
+      row.is_trade, row.favorite, row.list_type, row.folder || '', row.game
     ]);
   }
 

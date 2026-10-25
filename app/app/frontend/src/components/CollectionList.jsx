@@ -93,6 +93,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
   const [supertypeFilter, setSupertypeFilter] = useState(initialPrefs.supertypeFilter || []);
   const [cmcFilter, setCmcFilter] = useState(initialPrefs.cmcFilter || []);
   const [languageFilter, setLanguageFilter] = useState(initialPrefs.languageFilter || []);
+  const [folderFilter, setFolderFilter] = useState(initialPrefs.folderFilter || []);
   const [minPriceFilter, setMinPriceFilter] = useState(initialPrefs.minPriceFilter || '');
   const [maxPriceFilter, setMaxPriceFilter] = useState(initialPrefs.maxPriceFilter || '');
   const [sortBy, setSortBy] = useState(initialPrefs.sortBy || 'added-newest');
@@ -110,13 +111,13 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
   useEffect(() => {
     localStorage.setItem('bindarr_collection_prefs', JSON.stringify({
       viewMode, subTab, showFilters, searchFilter, gameFilter, locationFilter,
-      rarityFilter, conditionFilter, graderFilter, printingFilter, setFilter,
+      rarityFilter, conditionFilter, graderFilter, printingFilter, setFilter, folderFilter,
       typeFilter, supertypeFilter, cmcFilter, languageFilter, minPriceFilter,
       maxPriceFilter, sortBy, tradeOnly, favoriteOnly, stackCards,
       stackByCondition, stackByPrinting,
     }));
   }, [viewMode, subTab, showFilters, searchFilter, gameFilter, locationFilter,
-    rarityFilter, conditionFilter, graderFilter, printingFilter, setFilter,
+    rarityFilter, conditionFilter, graderFilter, printingFilter, setFilter, folderFilter,
     typeFilter, supertypeFilter, cmcFilter, languageFilter, minPriceFilter,
     maxPriceFilter, sortBy, tradeOnly, favoriteOnly, stackCards,
     stackByCondition, stackByPrinting]);
@@ -247,6 +248,10 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
     () => Array.from(new Set(collection.map(item => item.language).filter(Boolean))).sort(),
     [collection]
   );
+  const uniqueFolders = useMemo(
+    () => Array.from(new Set(collection.map(item => item.folder).filter(Boolean))).sort(),
+    [collection]
+  );
   const uniqueCmcs = useMemo(
     () => Array.from(new Set(collection.map(item => item.cmc).filter(v => v !== null && v !== undefined))).sort((a, b) => a - b),
     [collection]
@@ -254,7 +259,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
 
   const activeFilterCount =
     [locationFilter, rarityFilter, conditionFilter, graderFilter, printingFilter,
-    setFilter, typeFilter, supertypeFilter, cmcFilter, languageFilter]
+    setFilter, typeFilter, supertypeFilter, cmcFilter, languageFilter, folderFilter]
       .filter(v => v.length > 0).length
     + (gameFilter !== '' ? 1 : 0)
     + (minPriceFilter !== '' ? 1 : 0)
@@ -267,7 +272,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
     setGameFilter('');
     setLocationFilter([]); setRarityFilter([]); setConditionFilter([]); setGraderFilter([]);
     setPrintingFilter([]); setSetFilter([]); setTypeFilter([]); setSupertypeFilter([]);
-    setCmcFilter([]); setLanguageFilter([]);
+    setCmcFilter([]); setLanguageFilter([]); setFolderFilter([]);
     setMinPriceFilter(''); setMaxPriceFilter('');
     setTradeOnly(false); setFavoriteOnly(false);
   };
@@ -283,6 +288,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
       const matchesSearch = item.name.toLowerCase().includes(translatedSearch) ||
                             (item.printed_name || '').toLowerCase().includes(rawSearch) ||
                             (item.set_name || '').toLowerCase().includes(translatedSearch) ||
+                            (item.folder || '').toLowerCase().includes(rawSearch) ||
                             (item.number || '').includes(searchFilter);
       const matchesLocation = locationFilter.length === 0 ? true :
                               locationFilter.some(f => f === 'unassigned' ? !item.location_id : item.location_id == f);
@@ -298,6 +304,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
       const matchesSupertype = supertypeFilter.length === 0 ? true : supertypeFilter.includes(item.supertype);
       const matchesCmc = cmcFilter.length === 0 ? true : cmcFilter.includes(String(item.cmc));
       const matchesLanguage = languageFilter.length === 0 ? true : languageFilter.includes(item.language);
+      const matchesFolder = folderFilter.length === 0 ? true : folderFilter.includes(item.folder || '');
       const matchesFavorite = favoriteOnly ? item.favorite === 1 : true;
       // Rows written before grading existed have a NULL grader, which means raw —
       // so the comparison defaults rather than treating NULL as its own category.
@@ -311,7 +318,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
 
       return matchesSearch && matchesGame && matchesLocation && matchesRarity && matchesCondition &&
              matchesPrinting && matchesSet && matchesType && matchesSupertype &&
-             matchesCmc && matchesLanguage && matchesFavorite && matchesGrader && matchesMinPrice && matchesMaxPrice;
+             matchesCmc && matchesLanguage && matchesFolder && matchesFavorite && matchesGrader && matchesMinPrice && matchesMaxPrice;
     });
 
     if (sortBy === 'qty-desc') {
@@ -320,7 +327,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
       sortCardsByOrder(result, SORT_CRITERIA[sortBy] || SORT_CRITERIA['added-newest'], undefined, setsList);
     }
     return result;
-  }, [collection, searchFilter, gameFilter, locationFilter, rarityFilter, conditionFilter, printingFilter, setFilter, typeFilter, supertypeFilter, cmcFilter, languageFilter, favoriteOnly, graderFilter, minPriceFilter, maxPriceFilter, sortBy, setsList]);
+  }, [collection, searchFilter, gameFilter, locationFilter, rarityFilter, conditionFilter, printingFilter, setFilter, typeFilter, supertypeFilter, cmcFilter, languageFilter, folderFilter, favoriteOnly, graderFilter, minPriceFilter, maxPriceFilter, sortBy, setsList]);
 
   // Group duplicate cards if stack option is active
   const processedCollection = useMemo(() => {
@@ -331,7 +338,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
       // Language is always part of a stack: an English and a Chinese printing
       // are different physical cards even when the two optional visual grouping
       // switches below are relaxed.
-      let key = `${item.card_id}-${item.language || ''}-${item.list_type || 'collection'}`;
+      let key = `${item.card_id}-${item.language || ''}-${item.list_type || 'collection'}-${item.folder || ''}`;
       if (stackByCondition) key += `-${item.condition}`;
       if (stackByPrinting) key += `-${item.printing}`;
 
@@ -491,6 +498,12 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
                   onChange={setSetFilter}
                   options={uniqueSets.map(s => ({ value: s, label: s }))}
                 />
+              </Field>
+
+              <Field label={t('collection.folder')}>
+                <MultiSelectDropdown label={t('collection.folder')} allLabel={t('collection.allFolders')}
+                  value={folderFilter} onChange={setFolderFilter}
+                  options={[{ value: '', label: t('collection.noFolder') }, ...uniqueFolders.map(f => ({ value: f, label: f }))]} />
               </Field>
 
               <Field label={t('collection.fSupertype')}>
@@ -660,6 +673,10 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
           <button className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem' }} disabled={!selectedIds.size} onClick={() => runBulk('trade', null)}>{t('bulk.markTrade')}</button>
           <button className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem' }} disabled={!selectedIds.size} onClick={() => runBulk('untrade', null)}>{t('bulk.untrade')}</button>
           <button className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem' }} disabled={!selectedIds.size} onClick={() => runBulk('list_type', subTab === 'wishlist' ? 'collection' : 'wishlist', null)}>{t(subTab === 'wishlist' ? 'bulk.moveToCollection' : 'bulk.moveToWishlist')}</button>
+          <button className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem' }} disabled={!selectedIds.size} onClick={() => {
+            const value = window.prompt(t('collection.folderPrompt'), '');
+            if (value !== null) runBulk('folder', value);
+          }}>{t('collection.setFolder')}</button>
           <div style={{ width: '1px', height: '22px', background: 'var(--border-glass)' }} />
           <select className="select-control" value="" disabled={!selectedIds.size} onChange={(e) => { if (e.target.value) runBulk('condition', e.target.value); e.target.value = ''; }} style={{ fontSize: '0.72rem', maxWidth: '150px', padding: '0.3rem 0.4rem' }}>
             <option value="">{t('bulk.setCondition')}</option>
@@ -808,6 +825,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
                     <span style={{ fontSize: '0.7rem' }}>{item.set_name} • #{item.number}</span>
                     <span className="tcg-card-price">{priceText(item.price_trend, item.price_currency)}</span>
                   </div>
+                  {item.folder && <div style={{ fontSize: '0.62rem', color: 'var(--accent-yellow)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📁 {item.folder}</div>}
                 </div>
               </div>
             );
@@ -858,7 +876,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
                             </span>
                           </div>
                           <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-                            {item.printing} • {item.condition}
+                            {item.printing} • {item.condition}{item.folder ? ` • 📁 ${item.folder}` : ''}
                           </div>
                           {!selectMode && (
                             <div style={{ display: 'flex', gap: '0.35rem', marginTop: '2px' }}>

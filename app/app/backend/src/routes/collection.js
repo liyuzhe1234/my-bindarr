@@ -564,6 +564,7 @@ router.get('/collection', async (req, res) => {
         c.is_trade,
         c.favorite,
         c.list_type,
+        c.folder,
         c.notes,
         c.grader,
         c.grade,
@@ -694,6 +695,7 @@ async function addCardToCollection(user, body) {
     purchase_price = 0,
     location_id = null,
     list_type = 'collection',
+    folder = '',
     is_trade = 0,
     game = 'pokemon',
     stackable = false,
@@ -807,12 +809,12 @@ async function addCardToCollection(user, body) {
       const result = await db.run(`
         INSERT INTO collection (
           card_id, user_id, quantity, condition, printing, language, purchase_price,
-          location_id, compartment_id, position, is_trade, list_type, game,
+          location_id, compartment_id, position, is_trade, list_type, folder, game,
           grader, grade, cert_number
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         cardId, req.user.id, count, condition, printing, language, purchase_price || 0,
-        targetLocationId, resolved.compartment_id, resolved.position, is_trade ? 1 : 0, list_type, effectiveGame,
+        targetLocationId, resolved.compartment_id, resolved.position, is_trade ? 1 : 0, list_type, String(folder || '').trim(), effectiveGame,
         grader, gradeValue, certValue
       ]);
       lastInsertedId = result.lastID;
@@ -821,12 +823,12 @@ async function addCardToCollection(user, body) {
         const result = await db.run(`
           INSERT INTO collection (
             card_id, user_id, quantity, condition, printing, language, purchase_price,
-            location_id, compartment_id, position, is_trade, list_type, game,
+            location_id, compartment_id, position, is_trade, list_type, folder, game,
             grader, grade, cert_number
-          ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           cardId, req.user.id, condition, printing, language, purchase_price || 0,
-          targetLocationId, resolved.compartment_id, resolved.position + (i * 0.001), is_trade ? 1 : 0, list_type, effectiveGame,
+          targetLocationId, resolved.compartment_id, resolved.position + (i * 0.001), is_trade ? 1 : 0, list_type, String(folder || '').trim(), effectiveGame,
           grader, gradeValue, certValue
         ]);
         lastInsertedId = result.lastID;
@@ -1003,7 +1005,7 @@ router.put('/collection/:id', async (req, res) => {
   const { id } = req.params;
   const {
     quantity, condition, printing, language, purchase_price,
-    location_id, compartment_id, list_type, is_trade, favorite, game, notes,
+    location_id, compartment_id, list_type, is_trade, favorite, game, notes, folder,
     grader, grade, cert_number, market_value
   } = req.body;
 
@@ -1075,6 +1077,7 @@ router.put('/collection/:id', async (req, res) => {
     if (favorite !== undefined) { updates.push('favorite = ?'); params.push(favorite ? 1 : 0); }
     if (game !== undefined) { updates.push('game = ?'); params.push(game); }
     if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
+    if (folder !== undefined) { updates.push('folder = ?'); params.push(String(folder || '').trim().slice(0, 80)); }
     // Grading. The three columns move together on purpose: sending grader:'Raw'
     // must clear the grade and cert in the same statement, or the row keeps a grade
     // it no longer claims to have. Cracking a slab is a real thing people do.
@@ -1280,7 +1283,7 @@ router.delete('/collection/:id', async (req, res) => {
 });
 
 // 5b. Bulk actions
-const BULK_ACTIONS = ['delete', 'move', 'trade', 'untrade', 'favorite', 'unfavorite', 'list_type', 'condition', 'printing', 'purchase_split', 'add_to_deck'];
+const BULK_ACTIONS = ['delete', 'move', 'trade', 'untrade', 'favorite', 'unfavorite', 'list_type', 'folder', 'condition', 'printing', 'purchase_split', 'add_to_deck'];
 // Allowed field values mirror the collection table CHECK constraints in db.js.
 const BULK_CONDITIONS = ['Near Mint', 'Lightly Played', 'Moderately Played', 'Heavily Played', 'Damaged'];
 const BULK_PRINTINGS = ['Normal', 'Holofoil', 'Reverse Holofoil', '1st Edition', 'Promo'];
@@ -1350,6 +1353,12 @@ router.post('/collection/bulk', async (req, res) => {
       if (!['collection', 'wishlist'].includes(value)) return res.status(400).json({ error: 'Invalid list_type' });
       const result = await db.run(`UPDATE collection SET list_type = ? WHERE id IN (${placeholders}) AND user_id = ?`, [value, ...ids, req.user.id]);
       return res.json({ message: `Moved ${result.changes} card(s) to ${value}`, affected: result.changes });
+    }
+
+    if (action === 'folder') {
+      const folder = String(value || '').trim().slice(0, 80);
+      const result = await db.run(`UPDATE collection SET folder = ? WHERE id IN (${placeholders}) AND user_id = ?`, [folder, ...ids, req.user.id]);
+      return res.json({ message: folder ? `Filed ${result.changes} card(s) in ${folder}` : `Removed folder from ${result.changes} card(s)`, affected: result.changes });
     }
 
     if (action === 'condition' || action === 'printing') {

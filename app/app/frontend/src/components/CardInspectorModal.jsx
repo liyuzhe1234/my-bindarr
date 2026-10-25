@@ -53,6 +53,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
   const [favorite, setFavorite] = useState(0);
   const [listType, setListType] = useState('collection');
   const [notes, setNotes] = useState('');
+  const [folder, setFolder] = useState('');
   const [grader, setGrader] = useState('Raw');
   const [grade, setGrade] = useState('');
   const [certNumber, setCertNumber] = useState('');
@@ -101,6 +102,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
     setFavorite(card.favorite ? 1 : 0);
     setListType(card.list_type || 'collection');
     setNotes(card.notes || '');
+    setFolder(card.folder || '');
     setGrader(card.grader || 'Raw');
     setGrade(card.grade == null ? '' : String(card.grade));
     setCertNumber(card.cert_number || '');
@@ -173,6 +175,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
           is_trade: isTrade ? 1 : 0,
           favorite: favorite ? 1 : 0,
           notes,
+          folder,
           grader,
           grade: grade === '' ? null : parseFloat(grade),
           cert_number: certNumber.trim() || null,
@@ -195,6 +198,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
         card.is_trade = isTrade ? 1 : 0;
         card.favorite = favorite ? 1 : 0;
         card.notes = notes;
+        card.folder = folder.trim();
         card.grader = grader;
         card.grade = grade === '' ? null : parseFloat(grade);
         card.cert_number = certNumber.trim() || null;
@@ -552,6 +556,19 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
               </div>
 
               <div className="form-group">
+                <label>{t('collection.folder')}</label>
+                <input className="input-control" value={folder} onChange={(e) => setFolder(e.target.value)}
+                  maxLength={80} placeholder={t('collection.folderPlaceholder')} list="bindarr-folder-suggestions" />
+                <datalist id="bindarr-folder-suggestions">
+                  <option value={t('collection.folderUseful')} />
+                  <option value={t('collection.folderDeck')} />
+                  <option value={t('collection.folderDisplay')} />
+                  <option value={t('collection.folderSell')} />
+                </datalist>
+                <div className="field-hint">{t('collection.folderHint')}</div>
+              </div>
+
+              <div className="form-group">
                 <label>{t('nav.notes')}</label>
                 <textarea
                   className="input-control"
@@ -684,6 +701,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
                 <div><span style={{ color: 'var(--text-muted)' }}>{t('inspector.specPrinting')}</span> <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{activeCard.printing}</span></div>
                 <div><span style={{ color: 'var(--text-muted)' }}>{t('inspector.specLanguage')}</span> <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{activeCard.language}</span></div>
                 <div><span style={{ color: 'var(--text-muted)' }}>{t('inspector.specSupertype')}</span> <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{activeCard.supertype}</span></div>
+                {activeCard.folder && <div><span style={{ color: 'var(--text-muted)' }}>{t('collection.folder')}:</span> <span style={{ color: 'var(--accent-yellow)', fontWeight: 600 }}>{activeCard.folder}</span></div>}
               </div>
 
               {/* Storage Container details (clickable to view in storage) */}
