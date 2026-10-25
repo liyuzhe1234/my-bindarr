@@ -22,6 +22,8 @@
   "nav.notes": "Notes",
   "nav.settings": "Settings",
   "nav.admin": "Admin",
+  "nav.more": "More",
+  "nav.mobileLabel": "Main navigation",
   "header.greeting": "Hello,",
   "header.logOut": "Log Out",
   "role.admin": "admin",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { LayoutDashboard, Database, MapPin, Sparkles, Settings as SettingsIcon, LogOut, ShieldAlert, Plus, Swords, StickyNote, BadgeDollarSign } from 'lucide-react';
+import { LayoutDashboard, Database, MapPin, Sparkles, Settings as SettingsIcon, LogOut, ShieldAlert, Plus, Swords, StickyNote, BadgeDollarSign, Menu, X } from 'lucide-react';
 import Login from './components/Login';
 import Logo from './components/Logo';
 import { pushBackGuard } from './utils/useBackGuard';
@@ -111,6 +111,7 @@ function App() {
   const [toast, setToast] = useState(null);
   const [statsTrigger, setStatsTrigger] = useState(0);
   const [, setCurrencyRevision] = useState(0);
+  const [showMobileMore, setShowMobileMore] = useState(false);
 
   const tabGuardRef = useRef(null);
 
@@ -136,6 +137,11 @@ function App() {
       setActiveTab(prev);
     });
     setActiveTab(tab);
+  };
+
+  const mobileGoTab = (tab) => {
+    setShowMobileMore(false);
+    goTab(tab);
   };
 
   // Return users to the same working context after a refresh or a trip to
@@ -451,7 +457,7 @@ function App() {
           )}
         </nav>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div className="header-account" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             <Sparkles size={14} style={{ color: 'var(--accent-yellow)' }} />
             <span>{t('header.greeting')} <strong style={{ color: 'var(--text-strong)' }}>{user.username}</strong> ({t(`role.${user.role}`)})</span>
@@ -467,6 +473,33 @@ function App() {
           </button>
         </div>
       </header>
+
+      {showMobileMore && (
+        <div className="mobile-more-backdrop" role="presentation" onClick={() => setShowMobileMore(false)}>
+          <section className="mobile-more-sheet" role="dialog" aria-modal="true" aria-label={t('nav.more')} onClick={(event) => event.stopPropagation()}>
+            <div className="mobile-more-header">
+              <strong>{t('nav.more')}</strong>
+              <button type="button" className="mobile-more-close" onClick={() => setShowMobileMore(false)} aria-label={t('common.close')}>
+                <X size={20} />
+              </button>
+            </div>
+            <button type="button" className={`mobile-more-item ${activeTab === 'deckbuilder' ? 'active' : ''}`} onClick={() => mobileGoTab('deckbuilder')}><Swords size={20} /><span>{t('nav.deckBuilder')}</span></button>
+            <button type="button" className={`mobile-more-item ${activeTab === 'sales' ? 'active' : ''}`} onClick={() => mobileGoTab('sales')}><BadgeDollarSign size={20} /><span>{t('nav.sales')}</span></button>
+            <button type="button" className={`mobile-more-item ${activeTab === 'notes' ? 'active' : ''}`} onClick={() => mobileGoTab('notes')}><StickyNote size={20} /><span>{t('nav.notes')}</span></button>
+            <button type="button" className={`mobile-more-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => mobileGoTab('settings')}><SettingsIcon size={20} /><span>{t('nav.settings')}</span></button>
+            {user.role === 'admin' && <button type="button" className={`mobile-more-item ${activeTab === 'admin' ? 'active' : ''}`} onClick={() => mobileGoTab('admin')}><ShieldAlert size={20} /><span>{t('nav.admin')}</span></button>}
+            <button type="button" className="mobile-more-item mobile-logout" onClick={handleLogout}><LogOut size={20} /><span>{t('header.logOut')}</span></button>
+          </section>
+        </div>
+      )}
+
+      <nav className="mobile-bottom-nav" aria-label={t('nav.mobileLabel')}>
+        <button type="button" className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => mobileGoTab('dashboard')}><LayoutDashboard size={21} /><span>{t('nav.dashboard')}</span></button>
+        <button type="button" className={activeTab === 'add-cards' ? 'active' : ''} onClick={() => mobileGoTab('add-cards')}><Plus size={21} /><span>{t('nav.addCards')}</span></button>
+        <button type="button" className={activeTab === 'collection' ? 'active' : ''} onClick={() => mobileGoTab('collection')}><Database size={21} /><span>{t('nav.collection')}</span></button>
+        <button type="button" className={activeTab === 'storage' ? 'active' : ''} onClick={() => mobileGoTab('storage')}><MapPin size={21} /><span>{t('nav.storage')}</span></button>
+        <button type="button" className={['deckbuilder', 'sales', 'notes', 'settings', 'admin'].includes(activeTab) || showMobileMore ? 'active' : ''} onClick={() => setShowMobileMore(value => !value)} aria-expanded={showMobileMore}><Menu size={21} /><span>{t('nav.more')}</span></button>
+      </nav>
 
       {/* Main Content Area */}
       <main style={{ flex: 1, marginTop: '1rem' }}>
