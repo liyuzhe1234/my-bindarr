@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Logo from './components/Logo';
 import { pushBackGuard } from './utils/useBackGuard';
 import { useT } from './utils/i18n';
+import { ensureExchangeRates } from './utils/formatPrice';
 
 // View components are code-split so heavy deps (recharts in the chart views)
 // load on demand instead of in the initial bundle.
@@ -109,8 +110,16 @@ function App() {
   const [selectedCardFilter, setSelectedCardFilter] = useState('');
   const [toast, setToast] = useState(null);
   const [statsTrigger, setStatsTrigger] = useState(0);
+  const [, setCurrencyRevision] = useState(0);
 
   const tabGuardRef = useRef(null);
+
+  useEffect(() => {
+    const refreshCurrency = () => setCurrencyRevision(n => n + 1);
+    window.addEventListener('bindarr_currency_change', refreshCurrency);
+    ensureExchangeRates();
+    return () => window.removeEventListener('bindarr_currency_change', refreshCurrency);
+  }, []);
 
   // Navigate tabs through here so each change pushes a history entry: a back
   // gesture then returns to the PREVIOUS tab (not always dashboard), and modals

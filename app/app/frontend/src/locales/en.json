@@ -1145,6 +1145,7 @@
   "prefs.themeSet": "Theme set to {theme}.",
   "prefs.currency": "Currency",
   "prefs.currencyHint": "Changes the currency displayed for all prices across the app.",
+  "prefs.currencyRateHint": "Converted amounts use a daily cached reference rate and keep working offline.",
   "prefs.currencySet": "Currency set to {currency}.",
   "theme.dark": "Dark",
   "theme.light": "Light",
