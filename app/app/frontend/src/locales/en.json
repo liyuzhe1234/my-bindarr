@@ -771,7 +771,7 @@
   "search.sets": "SET(S) - COMMA FOR MULTIPLE (OPTIONAL)",
   "search.setsPlaceholderPokemon": "e.g. Base  or  sv1, sv2",
   "search.setsPlaceholderMtg": "e.g. ltr  or  ltr, ltc",
-  "search.submit": "Search Internet API",
+  "search.submit": "Search Cards",
   "search.rapid": "Rapid add",
   "search.rapidOn": "Rapid add on",
   "search.rapidHint": "Pin a set, then type card numbers and press Enter",
