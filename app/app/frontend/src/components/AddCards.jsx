@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Camera, Search, Award } from 'lucide-react';
+import { Camera, Search, Award, ImagePlus, Images, Zap } from 'lucide-react';
 import CameraScanner from './CameraScanner';
 import CardSearch from './CardSearch';
 import SlabLookup from './SlabLookup';
@@ -52,6 +52,25 @@ function AddCards({ onAddSuccess, showToast, setActiveTab, initialMode = 'scan' 
             <span>{t('addCards.slab')}</span>
           </button>
         </div>
+      </div>
+
+      {/* Image import belongs to Add Cards.  These tools used to be injected as
+          overlapping fixed buttons on every page, including Collection and
+          Settings.  Keeping them here makes the entry point predictable while
+          preserving the focused standalone import screens. */}
+      <div className="glass-panel" style={{ padding: '0.8rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.65rem' }}>
+        <a href="/single-card-import.html" className="btn btn-secondary" style={{ minHeight: '54px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.65rem', textDecoration: 'none' }}>
+          <ImagePlus size={20} />
+          <span style={{ textAlign: 'left' }}><strong style={{ display: 'block' }}>{t('addCards.singleImage')}</strong><small style={{ color: 'var(--text-muted)' }}>{t('addCards.singleImageHint')}</small></span>
+        </a>
+        <a href="/deck-image-import.html" className="btn btn-secondary" style={{ minHeight: '54px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.65rem', textDecoration: 'none' }}>
+          <Images size={20} />
+          <span style={{ textAlign: 'left' }}><strong style={{ display: 'block' }}>{t('addCards.deckImage')}</strong><small style={{ color: 'var(--text-muted)' }}>{t('addCards.deckImageHint')}</small></span>
+        </a>
+        <a href="/efficiency-tools.html" className="btn btn-secondary" style={{ minHeight: '54px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.65rem', textDecoration: 'none' }}>
+          <Zap size={20} />
+          <span style={{ textAlign: 'left' }}><strong style={{ display: 'block' }}>{t('addCards.efficiency')}</strong><small style={{ color: 'var(--text-muted)' }}>{t('addCards.efficiencyHint')}</small></span>
+        </a>
       </div>
 
       <div>
