@@ -94,7 +94,12 @@ function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem('bindarr_active_tab');
+    return ['dashboard', 'add-cards', 'collection', 'storage', 'deckbuilder', 'sales', 'notes', 'settings', 'admin'].includes(saved)
+      ? saved
+      : 'dashboard';
+  });
   // First-run scanning setup. Asked once per session, only for an admin, and only
   // while it is genuinely incomplete — setupNeeded() reads the same endpoints the
   // wizard does so there is one definition of 'set up'.
@@ -116,12 +121,37 @@ function App() {
   const goTab = (tab) => {
     if (tab === activeTab) return;
     const prev = activeTab;
+    sessionStorage.setItem(`bindarr_scroll_${prev}`, String(window.scrollY || 0));
     tabGuardRef.current = pushBackGuard(() => {
       tabGuardRef.current = null;
       setActiveTab(prev);
     });
     setActiveTab(tab);
   };
+
+  // Return users to the same working context after a refresh or a trip to
+  // another section.  Delayed retries matter for data-backed views whose height
+  // grows after their first paint.
+  useEffect(() => {
+    localStorage.setItem('bindarr_active_tab', activeTab);
+    const restore = () => {
+      const y = Number(sessionStorage.getItem(`bindarr_scroll_${activeTab}`) || 0);
+      if (Number.isFinite(y) && y > 0) window.scrollTo({ top: y, behavior: 'auto' });
+    };
+    requestAnimationFrame(restore);
+    const retry1 = setTimeout(restore, 250);
+    const retry2 = setTimeout(restore, 750);
+    const save = () => sessionStorage.setItem(`bindarr_scroll_${activeTab}`, String(window.scrollY || 0));
+    window.addEventListener('scroll', save, { passive: true });
+    window.addEventListener('beforeunload', save);
+    return () => {
+      save();
+      clearTimeout(retry1);
+      clearTimeout(retry2);
+      window.removeEventListener('scroll', save);
+      window.removeEventListener('beforeunload', save);
+    };
+  }, [activeTab]);
 
   // Detect public share route on load
   const [shareToken] = useState(() => {

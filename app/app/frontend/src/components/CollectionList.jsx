@@ -17,6 +17,14 @@ import MultiSelectDropdown from './MultiSelectDropdown';
 
 const labelStyle = { fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' };
 
+const loadCollectionPrefs = () => {
+  try {
+    return JSON.parse(localStorage.getItem('bindarr_collection_prefs') || '{}');
+  } catch {
+    return {};
+  }
+};
+
 // Maps each Sort By option to sortCardsByOrder criteria so ordering matches the
 // storage engine (set = chronological via setsList, type = POKEMON_TYPE_ORDER).
 // 'qty-desc' isn't a card-order scheme, handled separately.
@@ -48,6 +56,7 @@ function Field({ label, children }) {
 
 function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter, setSelectedCardFilter, onNavigate, setSelectedLocationId, setFocusEntryId }) {
   const { t } = useT();
+  const [initialPrefs] = useState(loadCollectionPrefs);
   const [collection, setCollection] = useState([]);
   const [locations, setLocations] = useState([]);
   const [setsList, setSetsList] = useState([]);
@@ -63,40 +72,54 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
   }, [selectedCardFilter]);
 
   // UX view state
-  const [viewMode, setViewMode] = useState('gallery'); // 'gallery' or 'list'
+  const [viewMode, setViewMode] = useState(initialPrefs.viewMode || 'gallery'); // 'gallery' or 'list'
   const [inspectorCard, setInspectorCard] = useState(null);
   const [inspectorStartEdit, setInspectorStartEdit] = useState(false);
-  const [subTab, setSubTab] = useState('collection'); // 'collection', 'wishlist'
-  const [showFilters, setShowFilters] = useState(false);
+  const [subTab, setSubTab] = useState(initialPrefs.subTab || 'collection'); // 'collection', 'wishlist'
+  const [showFilters, setShowFilters] = useState(!!initialPrefs.showFilters);
 
   // Search & Filter state
-  const [searchFilter, setSearchFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState(initialPrefs.searchFilter || '');
   // '' | 'pokemon' | 'mtg'. Falls back to a visible game if the Settings default
   // has since been hidden.
-  const [gameFilter, setGameFilter] = useState(() => (isGameEnabled(localStorage.getItem('default_game')) ? localStorage.getItem('default_game') : defaultGameFilter()));
-  const [locationFilter, setLocationFilter] = useState([]);
-  const [rarityFilter, setRarityFilter] = useState([]);
-  const [conditionFilter, setConditionFilter] = useState([]);
-  const [graderFilter, setGraderFilter] = useState([]);
-  const [printingFilter, setPrintingFilter] = useState([]);
-  const [setFilter, setSetFilter] = useState([]);
-  const [typeFilter, setTypeFilter] = useState([]);
-  const [supertypeFilter, setSupertypeFilter] = useState([]);
-  const [cmcFilter, setCmcFilter] = useState([]);
-  const [languageFilter, setLanguageFilter] = useState([]);
-  const [minPriceFilter, setMinPriceFilter] = useState('');
-  const [maxPriceFilter, setMaxPriceFilter] = useState('');
-  const [sortBy, setSortBy] = useState('added-newest');
-  const [tradeOnly, setTradeOnly] = useState(false);
-  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [gameFilter, setGameFilter] = useState(() => isGameEnabled(initialPrefs.gameFilter) ? initialPrefs.gameFilter : (isGameEnabled(localStorage.getItem('default_game')) ? localStorage.getItem('default_game') : defaultGameFilter()));
+  const [locationFilter, setLocationFilter] = useState(initialPrefs.locationFilter || []);
+  const [rarityFilter, setRarityFilter] = useState(initialPrefs.rarityFilter || []);
+  const [conditionFilter, setConditionFilter] = useState(initialPrefs.conditionFilter || []);
+  const [graderFilter, setGraderFilter] = useState(initialPrefs.graderFilter || []);
+  const [printingFilter, setPrintingFilter] = useState(initialPrefs.printingFilter || []);
+  const [setFilter, setSetFilter] = useState(initialPrefs.setFilter || []);
+  const [typeFilter, setTypeFilter] = useState(initialPrefs.typeFilter || []);
+  const [supertypeFilter, setSupertypeFilter] = useState(initialPrefs.supertypeFilter || []);
+  const [cmcFilter, setCmcFilter] = useState(initialPrefs.cmcFilter || []);
+  const [languageFilter, setLanguageFilter] = useState(initialPrefs.languageFilter || []);
+  const [minPriceFilter, setMinPriceFilter] = useState(initialPrefs.minPriceFilter || '');
+  const [maxPriceFilter, setMaxPriceFilter] = useState(initialPrefs.maxPriceFilter || '');
+  const [sortBy, setSortBy] = useState(initialPrefs.sortBy || 'added-newest');
+  const [tradeOnly, setTradeOnly] = useState(!!initialPrefs.tradeOnly);
+  const [favoriteOnly, setFavoriteOnly] = useState(!!initialPrefs.favoriteOnly);
 
   // Stacking state (default to stacked)
-  const [stackCards, setStackCards] = useState(true);
+  const [stackCards, setStackCards] = useState(initialPrefs.stackCards !== false);
   // Keep physically different copies separate by default.  The inspector's
   // quantity endpoint reconciles copies with the same condition/printing/
   // language, so the visible stack must use that same definition.
-  const [stackByCondition, setStackByCondition] = useState(true);
-  const [stackByPrinting, setStackByPrinting] = useState(true);
+  const [stackByCondition, setStackByCondition] = useState(initialPrefs.stackByCondition !== false);
+  const [stackByPrinting, setStackByPrinting] = useState(initialPrefs.stackByPrinting !== false);
+
+  useEffect(() => {
+    localStorage.setItem('bindarr_collection_prefs', JSON.stringify({
+      viewMode, subTab, showFilters, searchFilter, gameFilter, locationFilter,
+      rarityFilter, conditionFilter, graderFilter, printingFilter, setFilter,
+      typeFilter, supertypeFilter, cmcFilter, languageFilter, minPriceFilter,
+      maxPriceFilter, sortBy, tradeOnly, favoriteOnly, stackCards,
+      stackByCondition, stackByPrinting,
+    }));
+  }, [viewMode, subTab, showFilters, searchFilter, gameFilter, locationFilter,
+    rarityFilter, conditionFilter, graderFilter, printingFilter, setFilter,
+    typeFilter, supertypeFilter, cmcFilter, languageFilter, minPriceFilter,
+    maxPriceFilter, sortBy, tradeOnly, favoriteOnly, stackCards,
+    stackByCondition, stackByPrinting]);
 
   // Multi-select / bulk actions — shared long-press + /api/collection/bulk logic.
   const {
