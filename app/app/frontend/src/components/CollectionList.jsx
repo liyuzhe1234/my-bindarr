@@ -92,8 +92,11 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
 
   // Stacking state (default to stacked)
   const [stackCards, setStackCards] = useState(true);
-  const [stackByCondition, setStackByCondition] = useState(false);
-  const [stackByPrinting, setStackByPrinting] = useState(false);
+  // Keep physically different copies separate by default.  The inspector's
+  // quantity endpoint reconciles copies with the same condition/printing/
+  // language, so the visible stack must use that same definition.
+  const [stackByCondition, setStackByCondition] = useState(true);
+  const [stackByPrinting, setStackByPrinting] = useState(true);
 
   // Multi-select / bulk actions — shared long-press + /api/collection/bulk logic.
   const {
@@ -302,14 +305,25 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
 
     const groups = {};
     filteredCollection.forEach(item => {
-      let key = item.card_id;
+      // Language is always part of a stack: an English and a Chinese printing
+      // are different physical cards even when the two optional visual grouping
+      // switches below are relaxed.
+      let key = `${item.card_id}-${item.language || ''}-${item.list_type || 'collection'}`;
       if (stackByCondition) key += `-${item.condition}`;
       if (stackByPrinting) key += `-${item.printing}`;
 
       if (!groups[key]) {
-        groups[key] = { ...item };
+        groups[key] = {
+          ...item,
+          _entryIds: [item.entry_id],
+          _mixedCondition: false,
+          _mixedPrinting: false,
+        };
       } else {
         groups[key].quantity += item.quantity;
+        groups[key]._entryIds.push(item.entry_id);
+        if (groups[key].condition !== item.condition) groups[key]._mixedCondition = true;
+        if (groups[key].printing !== item.printing) groups[key]._mixedPrinting = true;
       }
     });
     return Object.values(groups);

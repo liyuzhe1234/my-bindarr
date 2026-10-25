@@ -67,6 +67,11 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
   useBackGuard(isFullScreen, () => setIsFullScreen(false));
 
   const targetEntryId = card?.entry_id || card?.id;
+  const stackEntryIds = Array.isArray(card?._entryIds) && card._entryIds.length
+    ? card._entryIds.filter(Number.isInteger)
+    : (targetEntryId ? [targetEntryId] : []);
+  const isStack = stackEntryIds.length > 1;
+  const isMixedStack = !!(card?._mixedCondition || card?._mixedPrinting);
   if (targetEntryId !== prevTargetId) {
     setPrevTargetId(targetEntryId);
     if (localizedCard) setLocalizedCard(null);
@@ -144,6 +149,10 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
     e.preventDefault();
     if (!targetEntryId) return;
     const qNum = Math.max(1, parseInt(q, 10) || 1);
+    if (isMixedStack && qNum !== (card.quantity ?? 1)) {
+      showToast && showToast(t('inspector.mixedStackQuantity'));
+      return;
+    }
     try {
       const res = await fetch(`/api/collection/${targetEntryId}`, {
         method: 'PUT',
@@ -246,20 +255,19 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
     if (field === 'favorite') { setFavorite(nextFavorite); card.favorite = nextFavorite; }
     if (field === 'list_type') { setListType(nextListType); card.list_type = nextListType; }
 
-    // Only the toggled flags. Quantity and placement are deliberately absent:
-    // a favourite/trade toggle must never change how many copies you own or
-    // where they live, and sending quantity here reconciles the whole stack.
-    const payload = {
-      list_type: nextListType,
-      is_trade: nextIsTrade,
-      favorite: nextFavorite
-    };
-
     try {
-      const res = await fetch(`/api/collection/${targetEntryId}`, {
+      const bulkAction = field === 'favorite'
+        ? (nextFavorite ? 'favorite' : 'unfavorite')
+        : field === 'is_trade'
+          ? (nextIsTrade ? 'trade' : 'untrade')
+          : 'list_type';
+      const res = await fetch(isStack ? '/api/collection/bulk' : `/api/collection/${targetEntryId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        ...(isStack ? { method: 'POST' } : {}),
+        body: JSON.stringify(isStack
+          ? { entry_ids: stackEntryIds, action: bulkAction, value: field === 'list_type' ? nextListType : undefined }
+          : { list_type: nextListType, is_trade: nextIsTrade, favorite: nextFavorite })
       });
       if (res.ok) {
         hasToggledRef.current = true;
@@ -286,7 +294,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
       const res = await fetch('/api/collection/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry_ids: [targetEntryId], action: 'add_to_deck', value: deckId })
+        body: JSON.stringify({ entry_ids: stackEntryIds, action: 'add_to_deck', value: deckId })
       });
       const data = await res.json().catch(() => ({}));
       showToast && showToast(res.ok ? (data.message || t('inspector.addedToDeck')) : (data.error || t('inspector.errAddDeck')));
@@ -296,13 +304,24 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (wholeStack = false) => {
     if (!targetEntryId) return;
-    if (!window.confirm(t('collection.confirmDeleteCard', { name: card.name }))) return;
+    const deleteIds = wholeStack ? stackEntryIds : [targetEntryId];
+    const message = wholeStack
+      ? t('inspector.confirmDeleteStack', { count: deleteIds.length, name: card.name })
+      : t('inspector.confirmDeleteOne', { name: card.name });
+    if (!window.confirm(message)) return;
     try {
-      const res = await fetch(`/api/collection/${targetEntryId}`, { method: 'DELETE' });
+      const res = wholeStack
+        ? await fetch('/api/collection/bulk', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_ids: deleteIds, action: 'delete' })
+          })
+        : await fetch(`/api/collection/${targetEntryId}`, { method: 'DELETE' });
       if (res.ok) {
-        showToast && showToast(t('collection.cardRemoved', { name: card.name }));
+        showToast && showToast(wholeStack
+          ? t('inspector.stackRemoved', { count: deleteIds.length, name: card.name })
+          : t('collection.cardRemoved', { name: card.name }));
         onDeleted && onDeleted(targetEntryId);
         onUpdate && onUpdate();
         onClose();
@@ -460,6 +479,13 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
 
           {mode === 'edit' ? (
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {isStack && (
+                <div className="field-hint" style={{ padding: '0.65rem 0.8rem', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)' }}>
+                  {isMixedStack
+                    ? t('inspector.mixedStackEditHint', { count: stackEntryIds.length })
+                    : t('inspector.stackEditHint', { count: stackEntryIds.length })}
+                </div>
+              )}
               {listType === 'wishlist' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(74,222,128,0.1)', padding: '0.6rem 0.9rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(74,222,128,0.2)' }}>
                   <input type="checkbox" checked={listType === 'collection'} onChange={(e) => setListType(e.target.checked ? 'collection' : 'wishlist')} id="markOwned" style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
@@ -730,13 +756,16 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
                   <Star size={16} fill={favorite === 1 ? '#facc15' : 'none'} />
                 </button>
 
-                <button
-                  type="button"
-                  className="btn btn-danger btn-icon-only"
+                {isStack && (
+                  <button type="button" className="btn btn-secondary" onClick={() => handleDelete(false)}
+                    title={t('inspector.deleteOne')} style={{ fontSize: '0.75rem' }}>
+                    {t('inspector.deleteOne')}
+                  </button>
+                )}
+                <button type="button" className="btn btn-danger btn-icon-only"
                   style={{ borderRadius: 'var(--radius-sm)', padding: '0.6rem' }}
-                  onClick={handleDelete}
-                  title={t('inspector.deleteCard')}
-                >
+                  onClick={() => handleDelete(isStack)}
+                  title={isStack ? t('inspector.deleteStack', { count: stackEntryIds.length }) : t('inspector.deleteCard')}>
                   <Trash2 size={16} />
                 </button>
               </div>
