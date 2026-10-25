@@ -20,14 +20,20 @@ const sql = (statement, params = []) => new Promise((resolve, reject) => {
   const db = new sqlite3.Database(dbPath);
   db.run(statement, params, function (error) { db.close(); error ? reject(error) : resolve(this); });
 });
+const sqlGet = (statement, params = []) => new Promise((resolve, reject) => {
+  const db = new sqlite3.Database(dbPath);
+  db.get(statement, params, (error, row) => { db.close(); error ? reject(error) : resolve(row); });
+});
 
 test.before(async () => {
   server = spawn(process.execPath, ['src/server.js'], { cwd: path.resolve(__dirname, '..'), env: { ...process.env, DB_PATH: dbPath, PORT: String(port), HTTPS_PORT: String(port + 1), NODE_ENV: 'test' }, stdio: 'ignore' });
-  for (let i = 0; i < 50; i++) { try { const r = await request('/api/health'); if (r.ok) break; } catch {} await new Promise(r => setTimeout(r, 100)); }
+  let ready = false;
+  for (let i = 0; i < 150; i++) { try { const r = await request('/api/health'); if (r.ok) { ready = true; break; } } catch {} await new Promise(r => setTimeout(r, 100)); }
+  assert.equal(ready, true, 'test server did not become ready');
   const bootstrap = await request('/api/auth/bootstrap', { method: 'POST', body: JSON.stringify({ password: 'test-password-123' }) });
   assert.equal(bootstrap.status, 201); token = (await bootstrap.json()).token;
   await sql(`INSERT INTO card_cache (id,name,printed_name,set_name,number,image_url) VALUES ('card-1','Test Card','测试卡','Test Set','001','')`);
-  for (const cost of [10, 20, 30, 40, 50, 60]) await sql(`INSERT INTO collection (card_id,quantity,condition,printing,language,purchase_price,list_type,game,user_id) VALUES ('card-1',1,'Near Mint','Normal','Chinese (Simplified)',?,'collection','pokemon',1)`, [cost]);
+  for (const cost of [10, 20, 30, 40, 50, 60]) await sql(`INSERT INTO collection (card_id,quantity,condition,printing,language,purchase_price,list_type,folder,game,user_id) VALUES ('card-1',1,'Near Mint','Normal','Chinese (Simplified)',?,'collection',?,'pokemon',1)`, [cost, cost === 10 ? '常用卡' : '']);
 });
 
 test.after(() => { server?.kill(); });
@@ -45,6 +51,7 @@ test('create, edit and void a sale atomically with exact cost basis', async () =
   r = await request('/api/sales-summary'); const summary = await r.json();
   assert.equal(summary.cards_sold, 3); assert.equal(summary.net_revenue, 170); assert.equal(summary.realized_profit, 100);
   r = await request(`/api/sales/${sale.id}/void`, { method: 'POST' }); assert.equal(r.status, 200);
+  assert.equal((await sqlGet(`SELECT folder FROM collection WHERE id = 1`)).folder, '常用卡');
   r = await request('/api/sales-summary'); assert.equal((await r.json()).cards_sold, 0);
   r = await request('/api/sales?status=voided'); assert.equal((await r.json()).length, 1);
 });

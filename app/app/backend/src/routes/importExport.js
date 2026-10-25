@@ -19,6 +19,7 @@ router.get('/export', async (req, res) => {
         c.printing,
         c.language,
         c.purchase_price,
+        c.folder,
         c.added_at,
         cc.id as card_id,
         cc.name as name,
@@ -185,8 +186,8 @@ router.post('/import', async (req, res) => {
 
         await db.run(
           `INSERT INTO collection 
-           (card_id, user_id, quantity, condition, printing, language, purchase_price, game, added_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+           (card_id, user_id, quantity, condition, printing, language, purchase_price, folder, game, added_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
           [
             cardId,
             req.user.id,
@@ -195,6 +196,7 @@ router.post('/import', async (req, res) => {
             item.printing || 'Normal',
             item.language || 'English',
             item.purchase_price || 0,
+            String(item.folder || '').trim().slice(0, 80),
             item.game || 'pokemon'
           ]
         );

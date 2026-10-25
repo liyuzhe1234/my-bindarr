@@ -17,6 +17,7 @@ const EXPORT_STRATEGIES = {
     'Language': item.language || 'English',
     'Purchase Price': item.purchase_price || 0,
     'Market Price': item.price_trend || item.market_price || 0,
+    'Folder': item.folder || '',
     'Location Container': item.location_name || 'Unassigned',
     'Sub-Location Page/Row': item.sub_location_1 || '',
     'Sub-Location Slot/Section': item.sub_location_2 || '',

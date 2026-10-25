@@ -179,14 +179,14 @@ async function restoreItem(item, userId) {
   const values = [
     snap.id, snap.card_id, 1, snap.condition, snap.printing, snap.language,
     snap.purchase_price, locationId, compartmentId, position, snap.favorite || 0,
-    snap.is_trade || 0, snap.list_type || 'collection', snap.game || 'pokemon',
+    snap.is_trade || 0, snap.list_type || 'collection', snap.folder || '', snap.game || 'pokemon',
     snap.added_at, userId, snap.notes || '', snap.grader || 'Raw', snap.grade,
     snap.cert_number, snap.market_value, snap.market_value_source, snap.market_value_at
   ];
   try {
     await db.run(`INSERT INTO collection (
       id, card_id, quantity, condition, printing, language, purchase_price,
-      location_id, compartment_id, position, favorite, is_trade, list_type, game,
+      location_id, compartment_id, position, favorite, is_trade, list_type, folder, game,
       added_at, user_id, notes, grader, grade, cert_number, market_value,
       market_value_source, market_value_at
     ) VALUES (${values.map(() => '?').join(',')})`, values);
@@ -195,7 +195,7 @@ async function restoreItem(item, userId) {
     values.shift();
     await db.run(`INSERT INTO collection (
       card_id, quantity, condition, printing, language, purchase_price,
-      location_id, compartment_id, position, favorite, is_trade, list_type, game,
+      location_id, compartment_id, position, favorite, is_trade, list_type, folder, game,
       added_at, user_id, notes, grader, grade, cert_number, market_value,
       market_value_source, market_value_at
     ) VALUES (${values.map(() => '?').join(',')})`, values);
