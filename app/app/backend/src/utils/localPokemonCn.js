@@ -112,6 +112,38 @@ async function available() {
   }
 }
 
+async function status() {
+  const f = files();
+  if (!f) return { configured: false, available: false };
+  const rawMeta = fs.existsSync(f.rawMeta) ? await json(f.rawMeta).catch(() => ({})) : {};
+  const imageMeta = fs.existsSync(f.imageMeta) ? await json(f.imageMeta).catch(() => ({})) : {};
+  const images = await imageMap(f).catch(() => new Map());
+  const cached = await db.get(`SELECT COUNT(*) AS cards,
+      SUM(CASE WHEN image_url LIKE '/offline-pokemon-cn/%' THEN 1 ELSE 0 END) AS offline_images
+    FROM card_cache
+    WHERE id LIKE 'pokemontcgapi-cn-%' AND language = ?`, [languages.toName('zh-cn')]);
+  const sourceCards = Number(rawMeta.cards_count || imageMeta.source_cards_count || 0);
+  const downloadedImages = Number(imageMeta.images_downloaded || images.size || 0);
+  return {
+    configured: true,
+    available: await available(),
+    data_dir: f.base,
+    source_completed: rawMeta.completed === true,
+    image_completed: imageMeta.completed === true,
+    source_cards: sourceCards,
+    source_sets: Number(rawMeta.sets_count || 0),
+    cached_cards: Number(cached?.cards || 0),
+    downloaded_images: downloadedImages,
+    cached_offline_images: Number(cached?.offline_images || 0),
+    cards_without_images: Number(imageMeta.cards_without_images || 0),
+    failed_images: Math.max(0, Number(imageMeta.images_expected || 0) - downloadedImages),
+    missing_images: Math.max(0, sourceCards - downloadedImages),
+    last_error: imageMeta.error?.message || '',
+    source_completed_at: rawMeta.completed_at || null,
+    image_completed_at: imageMeta.completed_at || null,
+  };
+}
+
 function publicImageUrl(localPath) {
   return '/offline-pokemon-cn/' + String(localPath).split(/[\\/]+/).map(encodeURIComponent).join('/');
 }
@@ -270,4 +302,4 @@ async function getCardsBySet(setId) {
   return rows.map(parseCardRow);
 }
 
-module.exports = { root, available, sync, listSets, getCardsBySet, repairCnSupertypes };
+module.exports = { root, available, status, sync, listSets, getCardsBySet, repairCnSupertypes };

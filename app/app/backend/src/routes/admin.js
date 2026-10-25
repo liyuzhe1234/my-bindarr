@@ -15,6 +15,26 @@ const router = express.Router();
 
 router.use(authenticateToken, requireAdmin);
 
+router.get('/pokemon-cn/status', async (req, res) => {
+  try {
+    res.json(await require('../utils/localPokemonCn').status());
+  } catch (error) {
+    console.error('pokemon cn status failed:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to inspect the local Pokémon CN catalogue' });
+  }
+});
+
+router.post('/pokemon-cn/sync', async (req, res) => {
+  try {
+    const localPokemonCn = require('../utils/localPokemonCn');
+    const imported = await localPokemonCn.sync();
+    res.json({ imported, status: await localPokemonCn.status() });
+  } catch (error) {
+    console.error('pokemon cn sync failed:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to import the local Pokémon CN catalogue' });
+  }
+});
+
 router.post('/repair-pokemon-cn-supertypes', async (req, res) => {
   try {
     const localPokemonCn = require('../utils/localPokemonCn');

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Shield, UserPlus, Key, Trash2, ToggleLeft, ToggleRight, Search, Users, Globe, HardDriveDownload, Download, Sparkles } from 'lucide-react';
+import { Shield, UserPlus, Key, Trash2, ToggleLeft, ToggleRight, Search, Users, Globe, HardDriveDownload, Download, Sparkles, Images, RefreshCw } from 'lucide-react';
 import { useBackGuard } from '../utils/useBackGuard';
 import CatalogPanel from './CatalogPanel';
 import SetupWizard from './SetupWizard';
@@ -42,6 +42,8 @@ function AdminPanel({ user, onUpdateUser, showToast }) {
   // Database backup states
   const [backups, setBackups] = useState([]);
   const [backupLoading, setBackupLoading] = useState(false);
+  const [cnStatus, setCnStatus] = useState(null);
+  const [cnSyncing, setCnSyncing] = useState(false);
 
   // Scan catalog management (and its own polling) lives in CatalogPanel now.
   useEffect(() => {
@@ -49,9 +51,34 @@ function AdminPanel({ user, onUpdateUser, showToast }) {
     fetchUsers();
     fetchSettings();
     fetchBackups();
+    fetchCnStatus();
     return () => { mountedRef.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchCnStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/pokemon-cn/status');
+      if (response.ok && mountedRef.current) setCnStatus(await response.json());
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleCnSync = async () => {
+    setCnSyncing(true);
+    try {
+      const response = await fetch('/api/admin/pokemon-cn/sync', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || t('admin.cnSyncFailed'));
+      setCnStatus(data.status);
+      showToast(t('admin.cnSyncDone', { cards: data.status.cached_cards, images: data.status.downloaded_images }));
+    } catch (error) {
+      showToast(error.message || t('admin.cnSyncFailed'));
+    } finally {
+      setCnSyncing(false);
+    }
+  };
 
 
 
@@ -514,6 +541,40 @@ function AdminPanel({ user, onUpdateUser, showToast }) {
             their artwork. Replaced the per-set / whole-game ORB index panel. */}
         <div className="glass-panel">
           <CatalogPanel showToast={showToast} />
+        </div>
+
+        {/* Health of the separate offline Simplified-Chinese data download. */}
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <h3 style={{ color: 'var(--text-strong)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Images size={18} style={{ color: 'var(--accent-red)' }} />
+              {t('admin.cnHealthTitle')}
+            </h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleCnSync} disabled={cnSyncing || !cnStatus?.configured} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <RefreshCw size={14} className={cnSyncing ? 'spin' : ''} /> {cnSyncing ? t('admin.cnSyncing') : t('admin.cnSyncLocal')}
+            </button>
+          </div>
+          {!cnStatus ? (
+            <div className="spinner" style={{ width: 22, height: 22 }} />
+          ) : !cnStatus.configured ? (
+            <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('admin.cnNotConfigured')}</p>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.65rem' }}>
+                {[
+                  [t('admin.cnCards'), cnStatus.cached_cards],
+                  [t('admin.cnSets'), cnStatus.source_sets],
+                  [t('admin.cnImages'), cnStatus.downloaded_images],
+                  [t('admin.cnMissing'), cnStatus.missing_images],
+                ].map(([label, value]) => <div key={label} style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-glass)', background: 'var(--surface-1)' }}><div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>{label}</div><strong style={{ color: 'var(--text-strong)', fontSize: '1.2rem' }}>{Number(value || 0).toLocaleString(locale)}</strong></div>)}
+              </div>
+              <p style={{ margin: 0, color: cnStatus.missing_images ? 'var(--accent-yellow)' : 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                {cnStatus.missing_images ? t('admin.cnMissingHint', { count: cnStatus.missing_images, noImage: cnStatus.cards_without_images, failed: cnStatus.failed_images }) : t('admin.cnComplete')}
+              </p>
+              {cnStatus.last_error && <div style={{ padding: '0.65rem 0.8rem', borderRadius: 'var(--radius-sm)', background: 'rgba(255, 71, 71, 0.08)', color: 'var(--text-secondary)', fontSize: '0.75rem', wordBreak: 'break-word' }}>{cnStatus.last_error}</div>}
+              {cnStatus.missing_images > 0 && <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.5 }}>{t('admin.cnRetryHint')}<code style={{ display: 'block', marginTop: '0.4rem', padding: '0.55rem', borderRadius: '6px', background: 'rgba(0,0,0,0.28)', color: 'var(--text-primary)', overflowX: 'auto' }}>cd "{cnStatus.data_dir.replace(/[\\/]data[\\/]pokemon-cn$/, '')}"{`\n`}npm run sync:images</code></div>}
+            </>
+          )}
         </div>
 
         {/* Database Backup Panel */}
