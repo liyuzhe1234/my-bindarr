@@ -55,6 +55,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
   } = useMultiSelect({ showToast });
   const [bulkAdding, setBulkAdding] = useState(false);
   const [quickAdding, setQuickAdding] = useState(new Set());
+  const [quickUndo, setQuickUndo] = useState(null);
 
   // Set-code autocomplete, sourced from the sets already cached in the DB.
   const [knownSets, setKnownSets] = useState([]);
@@ -81,8 +82,8 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
   
   // Form states
   const [quantity, setQuantity] = useState(1);
-  const [condition, setCondition] = useState('Near Mint');
-  const [printing, setPrinting] = useState('Normal');
+  const [condition, setCondition] = useState(() => localStorage.getItem('bindarr_quick_condition') || 'Near Mint');
+  const [printing, setPrinting] = useState(() => localStorage.getItem('bindarr_quick_printing') || 'Normal');
   const [language, setLanguage] = useState('English');
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [grader, setGrader] = useState('Raw');
@@ -94,6 +95,11 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
   useEffect(() => {
     fetchLocations();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('bindarr_quick_condition', condition);
+    localStorage.setItem('bindarr_quick_printing', printing);
+  }, [condition, printing]);
 
   // Set codes for the autocomplete. The sets table already holds every set for
   // both games, so nobody has to know that "ltr" means Tales of Middle-earth.
@@ -363,13 +369,16 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
     try {
       const response = await fetch('/api/collection', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_id: card.id, quantity: 1, condition: 'Near Mint', printing: 'Normal',
-          language: card.language || langName(searchLang), purchase_price: 0, game, location_id: null, stackable: true })
+        body: JSON.stringify({ card_id: card.id, quantity: 1, condition, printing,
+          language: card.language || language || langName(searchLang), purchase_price: 0, game, location_id: null, stackable: true })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || t('search.errAddCard'));
       setCards(prev => prev.map(c => c.id === card.id ? { ...c, owned_qty: (c.owned_qty || 0) + 1 } : c));
-      onAddSuccess(); showToast(`${displayName(card)} 已快速加入 Collection`);
+      const receipt = { entryId: data.id, card, qty: 1 };
+      setQuickUndo(receipt);
+      onAddSuccess();
+      showToast(t('search.quickAdded', { name: displayName(card) }));
     } catch (e) { showToast(e.message); }
     finally { setQuickAdding(prev => { const n = new Set(prev); n.delete(card.id); return n; }); }
   };
@@ -431,6 +440,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
       const res = await fetch(`/api/collection/${entry.entryId}`, { method: 'DELETE' });
       if (!res.ok) { showToast(t('search.errUndo')); return; }
       setRapidLog(prev => prev.filter(e => e.entryId !== entry.entryId));
+      setQuickUndo(prev => prev?.entryId === entry.entryId ? null : prev);
       setCards(prev => prev.map(c => (c.id === entry.card.id
         ? { ...c, owned_qty: Math.max(0, (c.owned_qty || 0) - entry.qty) }
         : c)));
@@ -769,6 +779,18 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
       {/* Loading state */}
       {loading && <div className="spinner"></div>}
 
+      {quickUndo && (
+        <div className="glass-panel" style={{ marginBottom: '1rem', padding: '0.65rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.65rem', borderLeft: '4px solid var(--type-grass)' }}>
+          <Check size={16} style={{ color: 'var(--type-grass)', flexShrink: 0 }} />
+          <span style={{ flex: 1, color: 'var(--text-strong)', fontSize: '0.82rem' }}>
+            {t('search.quickAdded', { name: displayName(quickUndo.card) })}
+          </span>
+          <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.3rem 0.55rem' }} onClick={() => undoRapidAdd(quickUndo)}>
+            <Undo2 size={12} /> {t('search.undo')}
+          </button>
+        </div>
+      )}
+
       {/* Filters and Sorting Panel */}
       {!loading && cards.length > 0 && (
         <div className="glass-panel" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
@@ -894,8 +916,8 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
                     </div>
                   )}
                   {!selectMode && <div style={{ position:'absolute',bottom:8,left:6,right:6,zIndex:10,display:'flex',gap:4 }}>
-                    <button type="button" className="btn btn-secondary" style={{flex:1,padding:'3px',fontSize:'.62rem'}} onClick={e => {e.stopPropagation();openQuickAdd(card);}}>普通添加</button>
-                    <button type="button" className="btn btn-primary" style={{flex:1,padding:'3px',fontSize:'.62rem'}} disabled={quickAdding.has(card.id)} onClick={e => {e.stopPropagation();quickAddOne(card);}}><Plus size={10}/> {quickAdding.has(card.id) ? '添加中' : 'Quick Add'}</button>
+                    <button type="button" className="btn btn-secondary" style={{flex:1,padding:'3px',fontSize:'.62rem'}} onClick={e => {e.stopPropagation();openQuickAdd(card);}}>{t('search.normalAdd')}</button>
+                    <button type="button" className="btn btn-primary" style={{flex:1,padding:'3px',fontSize:'.62rem'}} disabled={quickAdding.has(card.id)} onClick={e => {e.stopPropagation();quickAddOne(card);}}><Plus size={10}/> {t(quickAdding.has(card.id) ? 'search.adding' : 'search.quickAdd')}</button>
                   </div>}
                 </div>
                 <div className="tcg-card-info">

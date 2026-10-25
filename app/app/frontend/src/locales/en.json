@@ -801,6 +801,8 @@
   "search.showingMatches.other": "Showing {shown} of {count} matches",
   "search.loadedSuffix": "({loaded} loaded)",
   "search.quickAdd": "Quick Add",
+  "search.normalAdd": "Add details",
+  "search.quickAdded": "{name} added to Collection.",
   "search.noFilterMatches": "No cards matched your active filters. Try clearing your selection above.",
   "search.addCardTitle": "Add Card to Collection",
   "search.addToCollection": "Add to Collection",

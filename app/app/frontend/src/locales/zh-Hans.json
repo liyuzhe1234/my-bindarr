@@ -1043,6 +1043,8 @@
   "search.numberPlaceholder": "例如 58/102、150",
   "search.pickPrinting.other": "#{number} 有 {count} 个印刷版本，请选择一个。",
   "search.quickAdd": "快速添加",
+  "search.normalAdd": "填写资料添加",
+  "search.quickAdded": "已将{name}加入收藏。",
   "search.rapid": "快速添加",
   "search.rapidHint": "固定一个系列，然后输入卡牌编号并按回车",
   "search.rapidNeedsSet": "请先在上面指定系列代码。",
